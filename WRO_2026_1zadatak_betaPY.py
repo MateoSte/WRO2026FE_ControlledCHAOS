@@ -134,10 +134,10 @@ print(hub.battery.voltage())
 drive = Motor(Port.F, Direction.CLOCKWISE)
 steer = Motor(Port.D)
 
-car = CarDriveBase(drive, steer, 62.4, 13, 600, 300, hub)
+car = CarDriveBase(drive, steer, 62.4, 13, 750, 300, hub)
 
-#left_sensor = UltrasonicSensor(Port.E)
-#right_sensor = UltrasonicSensor(Port.C)
+left_sensor = UltrasonicSensor(Port.E)
+right_sensor = UltrasonicSensor(Port.A)
 color_sensor = ColorSensor(Port.B)
 front_sensor = UltrasonicSensor(Port.C)
 
