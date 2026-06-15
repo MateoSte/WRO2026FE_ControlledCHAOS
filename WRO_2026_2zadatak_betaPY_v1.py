@@ -9,8 +9,36 @@ from ustruct import unpack
 
 
 class CarDriveBase:
+    """
+    A controller class for a car-style robot with a drive motor and a steer motor.
+    Provides methods for straight movement, turning with specific angles or radii,
+    and heading correction using a gyroscope.
+
+    Attributes:
+        drive_motor (Motor): The motor used for forward and backward movement.
+        steer_motor (Motor): The motor used for steering.
+        wheel_diameter (float): The diameter of the drive wheels in mm.
+        axle_track (float): The distance between the centers of the wheels in cm.
+        default_speed (int): The default speed for driving.
+        default_steer_speed (int): The default speed for steering.
+        hub (PrimeHub): The Prime Hub instance for IMU data and hardware control.
+        gyro (bool): Whether gyroscope correction is currently enabled.
+        running (bool): Status of the car's movement.
+    """
     def __init__(self, drive_motor, steer_motor, wheel_diameter,
                  axle_track, default_speed, default_steer_speed, hub):
+        """
+        Initializes the CarDriveBase with the specified hardware and parameters.
+
+        Args:
+            drive_motor (Motor): The motor used for driving.
+            steer_motor (Motor): The motor used for steering.
+            wheel_diameter (float): The diameter of the wheels in mm.
+            axle_track (float): The distance between the centers of the wheels in cm.
+            default_speed (int): The default speed for driving.
+            default_steer_speed (int): The default speed for steering.
+            hub (PrimeHub): The hub used to control the robot.
+        """
         self.drive_motor = drive_motor  # type: Motor
         self.steer_motor = steer_motor  # type: Motor
         self.wheel_diameter = wheel_diameter  # type: float
@@ -23,13 +51,30 @@ class CarDriveBase:
         self.hub.imu.reset_heading(0)
 
     def use_gyro(self, use):
+        """
+        Enables or disables the use of the gyroscope for heading correction.
+
+        Args:
+            use (bool): True to enable gyroscope, False to disable.
+        """
         self.gyro = use
         
     def reset_gyro(self):
+        """
+        Resets the gyroscope heading to zero if gyroscope use is enabled.
+        """
         if self.gyro:
             self.hub.imu.reset_heading(0)
         
     def correct(self, angle=0, step=30, pr=False):
+        """
+        Corrects the steering based on the gyroscope heading.
+
+        Args:
+            angle (int): The target heading angle in degrees.
+            step (int): The maximum steering adjustment step.
+            pr (bool): If True, prints debugging information.
+        """
         if self.gyro:
             # if pr:
             # print(max(-abs(step), min(abs(step), 15 * ceil((angle - self.hub.imu.heading()) / 15))))
@@ -38,23 +83,50 @@ class CarDriveBase:
                 print("-c-", front_sensor.distance())
 
     def distance(self):
+        """
+        Calculates the distance traveled by the drive motor.
+
+        Returns:
+            float: The distance traveled in mm.
+        """
         return self.drive_motor.angle() * self.wheel_diameter * pi / 360
 
     def drive(self, speed=None):
+        """
+        Starts driving the robot at the specified speed.
+
+        Args:
+            speed (int, optional): The speed to drive at. If None, uses default_speed.
+        """
         if speed is None:
             speed = self.default_speed
         self.drive_motor.run(speed)
         self.running = True
 
     def stop(self):
+        """
+        Stops the drive motor.
+        """
         self.drive_motor.stop()
         self.running = False
 
     def brake(self):
+        """
+        Brakes the drive motor.
+        """
         self.drive_motor.brake()
         self.running = False
 
     def _straight(self, dist, turn_rate=0, speed=None, _gyro=True):
+        """
+        Internal method to drive in a straight line for a specified distance.
+
+        Args:
+            dist (float): The distance to travel in mm.
+            turn_rate (int): The target heading to maintain.
+            speed (int, optional): The speed to drive at.
+            _gyro (bool): Whether to use gyroscope correction.
+        """
         self.running = True
         if speed is None:
             speed = self.default_speed
@@ -71,10 +143,29 @@ class CarDriveBase:
         self.running = False
 
     def straight(self, dist, turn_rate=0, speed=None):
+        """
+        Drives in a straight line for a specified distance, resetting steering first.
+
+        Args:
+            dist (float): The distance to travel in mm.
+            turn_rate (int): The target heading to maintain.
+            speed (int, optional): The speed to drive at.
+        """
         self.steer_motor.run_target(self.default_steer_speed, 0)
         self._straight(dist, turn_rate, speed)
 
     def turn(self, target_deg, step_deg, side=1, tolerance=1.5, speed_steer=None, speed_drive=None):
+        """
+        Turns the robot by a specified angle using a specific steering step.
+
+        Args:
+            target_deg (int): The target heading change in degrees.
+            step_deg (int): The steering angle to use during the turn.
+            side (int): Steering side multiplier (1 for normal, -1 for inverted).
+            tolerance (float): The tolerance for the target angle.
+            speed_steer (int, optional): The steering speed.
+            speed_drive (int, optional): The driving speed.
+        """
         if target_deg == 0:
             return
         if step_deg == 0:
@@ -116,6 +207,17 @@ class CarDriveBase:
             # print("-------------------------------------------")
     
     def turn_radius(self, target_deg, radius, side=1, tolerance=1.5, speed_steer=None, speed_drive=None):
+        """
+        Turns the robot with a specific radius.
+
+        Args:
+            target_deg (int): The target heading change in degrees.
+            radius (float): The radius of the turn.
+            side (int): Steering side multiplier (1 for normal, -1 for inverted).
+            tolerance (float): The tolerance for the target angle.
+            speed_steer (int, optional): The steering speed.
+            speed_drive (int, optional): The driving speed.
+        """
         axle_track_mm = self.axle_track * 10  # cm to mm
 
         step_deg = degrees(2 * atan(axle_track_mm / (2 * radius)))
@@ -148,6 +250,9 @@ color_sensor = ColorSensor(Port.B)
 front_sensor = UltrasonicSensor(Port.C)
 
 def gumb():
+    """
+    Waits until any hub button is pressed.
+    """
     pressed = []
     while not any(pressed):
         pressed = hub.buttons.pressed()
@@ -187,6 +292,10 @@ red_data   = (0, 0, 0, 0) # x, y, width, height
 green_data = (0, 0, 0, 0) # x, y, width, height
 
 def Ocitaj_boje():
+    """
+    Reads color data (red and green) from the connected phone via AppData.
+    Updates global variables 'red_data' and 'green_data'.
+    """
     global red_data
     global green_data
     red_data   = (0, 0, 0, 0) # x, y, width, height
@@ -211,6 +320,9 @@ def Ocitaj_boje():
     print("Green:", green_data)
 
 def obilaziCrvena():
+    """
+    Logic for the robot to avoid a red object based on the detected red color data.
+    """
     global red_data
     xr,yr,wr,hr = red_data
     car.turn(45, 20)
@@ -225,6 +337,10 @@ def obilaziCrvena():
 obilaziCrvena()
 
 def pocetak():
+    """
+    Initial sequence to reset steering and detect the starting color (side).
+    Updates the global 'strana' variable based on detected color.
+    """
     global strana
     steer.run_target(300, 0)
     steer.reset_angle(0)
@@ -252,6 +368,10 @@ def pocetak():
         
 
 def okrenutLijevo():
+    """
+    Execution logic for when the robot starts on the left side (orange color detected).
+    Handles navigation and turn sequences.
+    """
     car.drive()
     while front_sensor.distance() > wall:
         car.correct()
@@ -303,6 +423,10 @@ def okrenutLijevo():
 
 
 def okrenutDesno():
+    """
+    Execution logic for when the robot starts on the right side (blue color detected).
+    Handles navigation and turn sequences.
+    """
     car.drive()
     while front_sensor.distance() > wall:
         car.correct()
@@ -346,6 +470,12 @@ def okrenutDesno():
 
 
 def zaobilazak_lijevo(broj):
+    """
+    Executes a left bypass maneuver.
+
+    Args:
+        broj (int): A parameter that determines the sharpness/speed of the turns.
+    """
     if(broj > 50):
         car.turn(90, 30, -1)
         car.turn(180, 30)
@@ -357,6 +487,12 @@ def zaobilazak_lijevo(broj):
     car.turn(10, 30, -1)
 
 def zaobilazak_desno(broj):
+    """
+    Executes a right bypass maneuver.
+
+    Args:
+        broj (int): A parameter that determines the sharpness/speed of the turns.
+    """
     if(broj > 50):
         car.turn(60, 25) 
         car.straight(100)
