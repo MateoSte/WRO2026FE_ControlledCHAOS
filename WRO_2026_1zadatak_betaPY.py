@@ -3,25 +3,13 @@ from pybricks.parameters import Port, Direction, Stop, Color, Axis
 from pybricks.tools import wait
 from pybricks.hubs import PrimeHub
 from pybricks.tools import StopWatch, wait
-from math import ceil, pi, tan, radians, sin, atan, degrees
+from math import ceil, pi, tan, radians, sin, atan, degrees, floor
 
 
 
 class CarDriveBase:
-    """Represents a car-like robot with independent drive and steering control."""
     def __init__(self, drive_motor, steer_motor, wheel_diameter,
                  axle_track, default_speed, default_steer_speed, hub):
-        """Initialize the CarDriveBase with motors and configuration parameters.
-        
-        Args:
-            drive_motor: Motor object for driving forward/backward.
-            steer_motor: Motor object for steering control.
-            wheel_diameter: Diameter of the drive wheels in millimeters.
-            axle_track: Distance between the two front wheels in centimeters.
-            default_speed: Default speed for driving operations in degrees per second.
-            default_steer_speed: Default speed for steering operations in degrees per second.
-            hub: PrimeHub object for access to IMU and other hub features.
-        """
         self.drive_motor = drive_motor  # type: Motor
         self.steer_motor = steer_motor  # type: Motor
         self.wheel_diameter = wheel_diameter  # type: float
@@ -34,72 +22,61 @@ class CarDriveBase:
         self.hub.imu.reset_heading(0)
 
     def use_gyro(self, use):
-        """Enable or disable gyro-based heading correction.
-        
-        Args:
-            use: Boolean indicating whether to use gyro for heading correction.
-        """
         self.gyro = use
         
     def reset_gyro(self):
-        """Reset the gyro heading to 0 degrees if gyro is enabled."""
         if self.gyro:
             self.hub.imu.reset_heading(0)
         
-    def correct(self, angle=0, step=30, pr=False):
-        """Correct steering to maintain a target heading angle.
-        
-        Args:
-            angle: Target heading angle in degrees (default 0).
-            step: Maximum steering angle adjustment per correction in degrees (default 30).
-            pr: Boolean to enable debug printing (default False).
-        """
-        if self.gyro:
+    def correct(self, angle=0, step=30, pr=False): #step = 30
+        #if self.gyro:
             # if pr:
             # print(max(-abs(step), min(abs(step), 15 * ceil((angle - self.hub.imu.heading()) / 15))))
-            self.steer_motor.run_target(self.default_steer_speed, max(-abs(step), min(abs(step), 15 * ceil((angle - self.hub.imu.heading()) / 15))), wait=False)
-            if pr:
-                print("-c-", front_sensor.distance())
-                print(angle, self.hub.imu.heading())
+         #   self.steer_motor.run_target(self.default_steer_speed, max(-abs(step), min(abs(step), 15 * ceil((angle - self.hub.imu.heading()) / 15))), wait=False)
+            #if pr:
+                # print("-c-", front_sensor.distance())
+                # print(angle, self.hub.imu.heading())
+
+        gyro = self.hub.imu.heading()
+        error = angle - gyro
+        if error<0:
+            ceil_value = floor(error / 15)
+        else:
+            ceil_value = ceil(error / 15)
+        correction = 15 * ceil_value
+        limited = max(-abs(step), min(abs(step), correction))
+
+        if self.gyro:
+            self.steer_motor.run_target(self.default_steer_speed, limited, wait=False)
+        
+        print(
+            f"Angle={angle:>4} | ",
+            f"Gyro={gyro:>4} | ",
+            f"Error={error:>4} | ",
+            f"Ceil={ceil_value:>3} | ",
+            f"Correction={correction:>4} | ",
+            f"Limited={limited:>4}"
+        )
+
 
     def distance(self):
-        """Calculate the distance traveled based on drive motor rotation.
-        
-        Returns:
-            Distance traveled in millimeters.
-        """
-        return self.drive_motor.angle() * self.wheel_diameter * pi / 360
+        return self.drive_motor.angle() * self.wheel_diameter * pi / 360 
 
     def drive(self, speed=None):
-        """Start driving at the specified or default speed.
-        
-        Args:
-            speed: Speed in degrees per second (default is default_speed).
-        """
         if speed is None:
             speed = self.default_speed
         self.drive_motor.run(speed)
         self.running = True
 
     def stop(self):
-        """Stop the drive motor immediately without braking."""
         self.drive_motor.stop()
         self.running = False
 
     def brake(self):
-        """Apply brakes to the drive motor."""
         self.drive_motor.brake()
         self.running = False
 
     def _straight(self, dist, turn_rate=0, speed=None, _gyro=True):
-        """Internal method to drive straight for a specified distance.
-        
-        Args:
-            dist: Distance to drive in millimeters.
-            turn_rate: Target heading angle for gyro correction in degrees (default 0).
-            speed: Speed in degrees per second (default is default_speed).
-            _gyro: Boolean to enable gyro correction during movement (default True).
-        """
         self.running = True
         if speed is None:
             speed = self.default_speed
@@ -116,26 +93,10 @@ class CarDriveBase:
         self.running = False
 
     def straight(self, dist, turn_rate=0, speed=None):
-        """Drive straight for a specified distance with wheels aligned.
-        
-        Args:
-            dist: Distance to drive in millimeters.
-            turn_rate: Target heading angle for gyro correction in degrees (default 0).
-            speed: Speed in degrees per second (default is default_speed).
-        """
         self.steer_motor.run_target(self.default_steer_speed, 0)
         self._straight(dist, turn_rate, speed)
 
     def turn(self, target_deg, step_deg, tolerance=1.5, speed_steer=None, speed_drive=None):
-        """Turn the robot by a target angle using Ackermann steering geometry.
-        
-        Args:
-            target_deg: Target rotation angle in degrees.
-            step_deg: Steering wheel angle in degrees for the turn.
-            tolerance: Heading tolerance in degrees (default 1.5).
-            speed_steer: Steering motor speed in degrees per second (default is default_steer_speed).
-            speed_drive: Drive motor speed in degrees per second (default is default_speed).
-        """
         if target_deg == 0:
             return
         if step_deg == 0:
@@ -184,15 +145,6 @@ class CarDriveBase:
             # print("-------------------------------------------")
     
     def turn_radius(self, target_deg, radius, tolerance=1.5, speed_steer=None, speed_drive=None):
-        """Turn the robot by a target angle using a specified turning radius.
-        
-        Args:
-            target_deg: Target rotation angle in degrees.
-            radius: Turning radius in millimeters.
-            tolerance: Heading tolerance in degrees (default 1.5).
-            speed_steer: Steering motor speed in degrees per second (default is default_steer_speed).
-            speed_drive: Drive motor speed in degrees per second (default is default_speed).
-        """
         axle_track_mm = self.axle_track * 10  # cm to mm
 
         step_deg = degrees(2 * atan(axle_track_mm / (2 * radius)))
@@ -212,22 +164,22 @@ print(hub.battery.voltage())
 drive = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 steer = Motor(Port.D)
 
-car = CarDriveBase(drive, steer, 62.4, 11, 550, 300, hub) #(drive, steer, 62.4, 10, 450, 300, hub)
+car = CarDriveBase(drive, steer, 62.4, 11, 500, 300, hub) #(drive, steer, 62.4, 10, 450, 300, hub)
 
-left_sensor = UltrasonicSensor(Port.E)
+#left_sensor = UltrasonicSensor(Port.E)
 right_sensor = UltrasonicSensor(Port.A)
-color_sensor = ColorSensor(Port.B)
+left_color_sensor = ColorSensor(Port.B)
+right_color_sensor = ColorSensor(Port.E)
 front_sensor = UltrasonicSensor(Port.C)
 
 def gumb():
-    """Wait for any button on the hub to be pressed."""
     pressed = []
     while not any(pressed):
         pressed = hub.buttons.pressed()
         wait(10)
 
-wall = 1100
-turn_r = 330
+wall = 1000
+turn_r = 290 # 330
 
 # st = 0  # 1
 # st = 233  # 2
@@ -240,7 +192,7 @@ st = 500  # 3
 NARANCASTA = Color(h=25, s=100, v=100)
 PLAVA = Color(h=228, s=100, v=100)
 BIJELA = Color(h=60, s=0, v=100)
-color_sensor.detectable_colors([NARANCASTA, PLAVA, BIJELA])
+left_color_sensor.detectable_colors([NARANCASTA, PLAVA, BIJELA])
 
 
 IMENA_BOJA = {
@@ -252,11 +204,6 @@ IMENA_BOJA = {
 strana = "LEFT"
 
 def pocetak():
-    """Initialize the robot by detecting the starting direction based on color sensor.
-    
-    The robot drives forward until it detects either orange (LEFT) or blue (RIGHT) color,
-    then sets the global strana variable accordingly.
-    """
     car.use_gyro(True)
     global strana
     steer.run_target(100, 0)
@@ -267,18 +214,31 @@ def pocetak():
     car.drive()
     while flag == 1:
         car.correct()
-        bojaRaw = color_sensor.color()
-        print("bojaRAW:", bojaRaw)
-        boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
-        print("boja:", boja)
-        if(boja == "NARANCASTA" or boja == "PLAVA"):
+        bojaRawL = left_color_sensor.color()
+        bojaRawR = right_color_sensor.color()
+        #print("bojaRAW:", bojaRaw)
+        bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
+        bojaR = IMENA_BOJA.get(bojaRawR, str(bojaRawR))
+        #print("boja:", boja)
+        if(bojaL == "NARANCASTA" or bojaL == "PLAVA" or bojaR == "NARANCASTA" or bojaR == "PLAVA"):
             # hub.speaker.beep()
             car.brake()
             wait(500)
             flag = 0
-            if(boja == "NARANCASTA"):
+        elif(front_sensor.distance()<450):
+            car.brake()
+            wait(500)
+            flag = 2
+        
+        if(flag == 0):
+            if(bojaL == "NARANCASTA" or bojaR == "NARANCASTA"):
                 strana = "LEFT"
-            elif(boja == "PLAVA"):
+            elif(bojaL == "PLAVA" or bojaR == "PLAVA"):
+                strana = "RIGHT"
+        elif(flag == 2):
+            if(right_sensor.distance() > 1000):
+                strana = "LEFT"
+            else:
                 strana = "RIGHT"
         wait(10)
     print(strana)
@@ -286,11 +246,6 @@ def pocetak():
         
 
 def okrenutLijevo():
-    """Execute the left turn sequence, following the left wall and detecting orange color markers.
-    
-    The robot drives forward until reaching a wall, then turns left and follows the wall
-    while detecting 11 orange color markers along a path.
-    """
     car.drive()
     while front_sensor.distance() > wall:
         car.correct()
@@ -316,41 +271,45 @@ def okrenutLijevo():
     for i in range(11):
         check_target=0
         car.drive()
-        boja = "BIJELA"
-        while (boja != "NARANCASTA"):
+        bojaL = "BIJELA"
+        bojaR = "BIJELA"
+        while (bojaL != "NARANCASTA" and bojaR != "NARANCASTA" and front_sensor.distance() > 500):
             car.correct()
-            bojaRaw = color_sensor.color()
-            boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
+            bojaRawL = left_color_sensor.color()
+            bojaRawR = right_color_sensor.color()
+            bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
+            bojaR = IMENA_BOJA.get(bojaRawR, str(bojaRawR))
             wait(10)
         car.brake()
 
+        """calculates average distance to wall"""
+        steer.run_target(300, -25)
+        distance = []
+        for i in range(10):
+            distance.append(front_sensor.distance())
+            steer.run_angle(200,5)
+            wait(10)
         steer.run_target(300, 0)
-        wait(10)
+        for i in range(3):
+            distance.remove(min(distance))
+            distance.remove(max(distance))
+        dist = sum(distance)/4
+    	""" --------------------------------"""
+
+
 
         hub.speaker.beep()
         print("---", front_sensor.distance(), i, hub.imu.heading())
         # gumb()
-        car.straight(-(wall - st - front_sensor.distance()))
+        car.straight(-(wall - st - dist))
         wait(500)        
         car.turn_radius(90, turn_r)
         
-
-
-    car.drive()
-    while front_sensor.distance() > wall + dist:
-        car.correct()
-        wait(5)
-    car.brake()
 
     car.straight(200)
 
 
 def okrenutDesno():
-    """Execute the right turn sequence, following the right wall and detecting blue color markers.
-    
-    The robot drives forward until reaching a wall, then turns right and follows the wall
-    while detecting 11 blue color markers along a path.
-    """
     car.drive()
     while front_sensor.distance() > wall:
         car.correct()
@@ -364,11 +323,14 @@ def okrenutDesno():
     for i in range(11):
         check_target=0
         car.drive()
-        boja = "BIJELA"
-        while (boja != "PLAVA"):
+        bojaL = "BIJELA"
+        bojaR = "BIJELA"
+        while (bojaL != "PLAVA" and bojaR != "PLAVA" and front_sensor.distance() > 500):
             car.correct()
-            bojaRaw = color_sensor.color()
-            boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
+            bojaRawL = left_color_sensor.color()
+            bojaRawR = right_color_sensor.color()
+            bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
+            bojaR = IMENA_BOJA.get(bojaRawLR, str(bojaRawR))
             wait(10)
         car.brake()
         # car.drive()
@@ -377,16 +339,26 @@ def okrenutDesno():
         #     wait(5)
         # car.brake()
 
+        """calculates average distance to wall"""
+        steer.run_target(300, -25)
+        distance = []
+        for i in range(10):
+            distance.append(front_sensor.distance())
+            steer.run_angle(200,5)
+            wait(10)
         steer.run_target(300, 0)
-        wait(10)
+        for i in range(3):
+            distance.remove(min(distance))
+            distance.remove(max(distance))
+        dist = sum(distance)/4
+    	""" --------------------------------"""
+
+
 
         hub.speaker.beep()
         print("---", front_sensor.distance(), i, hub.imu.heading())
         # gumb()
-        steer.run_target(300, 0)
-        wait(10)
-        #car.use_gyro(False)
-        car.straight(-(wall - st - front_sensor.distance()))
+        car.straight(-(wall - st - dist))
         #car.use_gyro(True)
         wait(500)
         car.turn_radius(90, -turn_r) #90 - i / 10
@@ -395,18 +367,18 @@ def okrenutDesno():
     car.straight(200)
 
 
+
 try:
-    sw = StopWatch()
     pocetak()
     if(strana == "LEFT"):
         okrenutLijevo()
     elif(strana == "RIGHT"):
         okrenutDesno()
-    car.straight(100)
-    print(sw/1000)
+    #car.straight(100)
+    
 finally:
-    print("battery: ",hub.battery.voltage())
-
+    print("\n battery: ",hub.battery.voltage())
+    
 
 
 # while True:
