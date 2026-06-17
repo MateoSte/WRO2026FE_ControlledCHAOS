@@ -3,7 +3,7 @@ from pybricks.parameters import Port, Direction, Stop, Color, Axis
 from pybricks.tools import wait
 from pybricks.hubs import PrimeHub
 from pybricks.tools import StopWatch, wait
-from math import ceil, pi, tan, radians, sin, atan, degrees, floor
+from math import ceil, pi, tan, radians, sin, atan, degrees, floor, cos, log
 from ustruct import unpack
 from pybricks.tools import AppData
 
@@ -86,12 +86,13 @@ class CarDriveBase:
         degrees = dist / o * 360
         speed = abs(speed) * (1 if degrees > 0 else -1)
         start = self.drive_motor.angle()
-        self.drive_motor.run(speed)
-        while abs(self.drive_motor.angle() - start) < abs(degrees):
-            if self.gyro and _gyro:
-                self.correct(turn_rate)
-            wait(5)
-        self.drive_motor.brake()
+        # self.drive_motor.run(speed)
+        # while abs(self.drive_motor.angle() - start) < abs(degrees):
+        #     if self.gyro and _gyro:
+        #         self.correct(turn_rate)
+        #     wait(5)
+        # self.drive_motor.brake()
+        self.drive_motor.run_angle(speed, degrees)
         self.running = False
 
     def straight(self, dist, turn_rate=0, speed=None):
@@ -159,6 +160,27 @@ class CarDriveBase:
         self.turn(target_deg, step_deg, tolerance, speed_steer, speed_drive)
         print("turn radius stao")
         wait(100)
+    
+    def bypass_obstacle(self, lateral_clearance, sensor_distance, direction=1,
+                     safety_margin=50, speed_steer=None, speed_drive=None):
+        """
+        lateral_clearance: potreban bocni odmak u mm (konstanta tvoje staze/prepreke)
+        sensor_distance:   front_sensor.distance() u trenutku detekcije, mm
+        direction:         +1 ili -1, ovisno na koju stranu zaobilazis (npr. RED vs GREEN)
+        safety_margin:     rezerva do same prepreke, mm
+        """
+        forward_budget = sensor_distance - safety_margin
+        if forward_budget <= 0:
+            raise ValueError("Nedovoljno prostora - treba se prije odvesti unatrag i preracunati.")
+
+        theta = 2 * atan(lateral_clearance / forward_budget)
+        theta_deg = degrees(theta) * direction
+        radius = forward_budget / (2 * sin(theta))
+
+        print(f"theta={theta_deg:.1f} deg, radius={radius:.1f} mm, budget={forward_budget:.1f} mm")
+
+        self.turn_radius(theta_deg, radius, speed_steer=speed_steer, speed_drive=speed_drive)
+        self.turn_radius(-theta_deg, radius, speed_steer=speed_steer, speed_drive=speed_drive)
 
 hub = PrimeHub(front_side=Axis.Y)
 print(hub.battery.voltage())
@@ -203,7 +225,66 @@ IMENA_BOJA = {
     BIJELA:      "BIJELA"
 }
 
-strana = "LEFT"
+strana = ""
+
+car.use_gyro(True)
+
+
+def bypass_c_continuous(self, S_arc, delta_max_deg=30, direction=1, speed=None):
+    """
+    S_arc: ukupna duljina krivulje (820.2mm iz simulacije), mjerena preko enkodera
+    direction: +1 ili -1, ovisno o strani zaobilaska
+    """
+    if speed is None:
+        speed = self.default_speed
+    o = self.wheel_diameter * pi
+    target_deg = S_arc / o * 360
+    start = self.drive_motor.angle()
+    self.drive_motor.run(speed)
+    while abs(self.drive_motor.angle() - start) < target_deg:
+        frac = abs(self.drive_motor.angle() - start) / target_deg  # 0 -> 1
+        delta = delta_max_deg * (1 - 2*frac) * direction
+        self.steer_motor.run_target(self.default_steer_speed, delta, wait=False)
+        wait(5)
+    self.drive_motor.brake()
+    self.steer_motor.run_target(self.default_steer_speed, 0)
+
+
+
+
+
+
+def bypass_c_continuous2(self, S_arc, delta_max_deg=30, direction=1, speed=None, kp=2.0):
+    if speed is None:
+        speed = self.default_speed
+    L = 140  # stvarni razmak izmedju prednje i zadnje osi na kojima su kotači
+    delta_max = radians(delta_max_deg)
+    o = self.wheel_diameter * pi
+    target_wheel_deg = S_arc / o * 360
+
+    start_wheel = self.drive_motor.angle()
+    start_heading = self.hub.imu.heading()  # lokalna referenca, ne resetira nista globalno
+    self.drive_motor.run(speed)
+
+    while abs(self.drive_motor.angle() - start_wheel) < target_wheel_deg:
+        s = abs(self.drive_motor.angle() - start_wheel) / 360 * o
+        frac = min(s / S_arc, 1.0)
+        delta_s = delta_max * (1 - 2*frac)  # feedforward dio, bez direction
+
+        cos_ratio = cos(delta_s) / cos(delta_max)
+        psi_target = degrees(S_arc / (2*delta_max*L) * log(cos_ratio)) * direction
+        target_heading = start_heading + psi_target
+
+        err = target_heading - self.hub.imu.heading()
+        steer_cmd = degrees(delta_s) * direction + kp * err
+        steer_cmd = max(-delta_max_deg, min(delta_max_deg, steer_cmd))
+
+        self.steer_motor.run_target(self.default_steer_speed, steer_cmd, wait=False)
+        wait(5)
+
+    self.drive_motor.brake()
+    self.steer_motor.run_target(self.default_steer_speed, 0)
+    wait(500)
 
 def pocetak():
     car.use_gyro(True)
@@ -218,7 +299,7 @@ def pocetak():
         car.correct()
         bojaRaw = color_sensor.color()
         #print("bojaRAW:", bojaRaw)
-        boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
+        bojaL = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
         #print("boja:", boja)
         if(boja == "NARANCASTA" or boja == "PLAVA" ):
             # hub.speaker.beep()
@@ -231,9 +312,9 @@ def pocetak():
             flag = 2
         
         if(flag == 0):
-            if(boja == "NARANCASTA" ):
+            if(boja == "NARANCASTA"):
                 strana = "LEFT"
-            elif(boja == "PLAVA"):
+            elif(boja == "PLAVA" ):
                 strana = "RIGHT"
         elif(flag == 2):
             if(right_sensor.distance() > 1000):
@@ -242,129 +323,12 @@ def pocetak():
                 strana = "RIGHT"
         wait(10)
     print(strana)
-    
-        
-
-def okrenutLijevo():
-    car.drive()
-    while front_sensor.distance() > wall:
-        car.correct()
-        wait(5)
-    car.brake()
-    udalj = []
-    for i in range(15):
-        udalj.append(front_sensor.distance())
-        wait(20)
-    for i in range(5):
-        udalj.remove(max(udalj))
-    for i in range(5):
-        udalj.remove(min(udalj))
-    dist = 0
-    for i in udalj:
-        dist += i
-    dist = dist/5
-    car.straight(-(wall - st - dist))
-    dist = car.distance()
-    wait(500)
-    car.turn_radius(90, turn_r)
-
-    for i in range(11):
-        check_target=0
-        car.drive()
-        boja = "BIJELA"
-        while (boja != "NARANCASTA" and front_sensor.distance() > 500):
-            car.correct()
-            bojaRaw = color_sensor.color()
-            boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
-            wait(10)
-        car.brake()
-
-        """calculates average distance to wall"""
-        steer.run_target(300, -25)
-        distance = []
-        for i in range(10):
-            distance.append(front_sensor.distance())
-            steer.run_angle(200,5)
-            wait(10)
-        steer.run_target(300, 0)
-        for i in range(3):
-            distance.remove(min(distance))
-            distance.remove(max(distance))
-        dist = sum(distance)/4
-    	""" --------------------------------"""
-
-
-
-        hub.speaker.beep()
-        print("---", front_sensor.distance(), i, hub.imu.heading())
-        # gumb()
-        car.straight(-(wall - st - dist))
-        wait(500)        
-        car.turn_radius(90, turn_r)
-        
-
-    car.straight(200)
-
-
-def okrenutDesno():
-    car.drive()
-    while front_sensor.distance() > wall:
-        car.correct()
-        wait(5)
-    car.brake()
-    car.straight(-(wall - st - front_sensor.distance()))
-    dist = car.distance()
-    wait(500)
-    car.turn_radius(90, -turn_r)
-
-    for i in range(11):
-        check_target=0
-        car.drive()
-        boja = "BIJELA"
-        while (boja != "PLAVA" and front_sensor.distance() > 500):
-            car.correct()
-            bojaRaw = color_sensor.color()
-            boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
-            wait(10)
-        car.brake()
-        # car.drive()
-        # while front_sensor.distance() > wall:
-        #     car.correct()
-        #     wait(5)
-        # car.brake()
-
-        """calculates average distance to wall"""
-        steer.run_target(300, -25)
-        distance = []
-        for i in range(10):
-            distance.append(front_sensor.distance())
-            steer.run_angle(200,5)
-            wait(10)
-        steer.run_target(300, 0)
-        for i in range(3):
-            distance.remove(min(distance))
-            distance.remove(max(distance))
-        dist = sum(distance)/4
-    	""" --------------------------------"""
-
-
-
-        hub.speaker.beep()
-        print("---", front_sensor.distance(), i, hub.imu.heading())
-        # gumb()
-        car.straight(-(wall - st - dist))
-        #car.use_gyro(True)
-        wait(500)
-        car.turn_radius(90, -turn_r) #90 - i / 10
-
-
-    car.straight(200)
 
 
 app = AppData([(0, 4)])
 
-RED_HUE   = bytes([10]) # hue = 20
-GREEN_HUE = bytes([50]) # hue = 100
+RED_HUE   = bytes([160])
+GREEN_HUE = bytes([46])
 
 
 # BOJE KOJE CE BITI NA NATJECANJU: ######
@@ -382,10 +346,11 @@ def Ocitaj_crvenu():
     app.configure(0, 0, RED_HUE)
     wait(500)  # give the phone time to switch and send a fresh frame
     red_data = unpack("BBBB", app.get_bytes(0))
+    print("Red before check:",   red_data)
     xr,yr,wr,hr = red_data
     if(wr<10 and hr<10):
         red_data = (0,0,0,0)
-    print("Red:",   red_data)
+    print("Red after check:",   red_data)
 
 def Ocitaj_zelenu():
     # --- Read green ---
@@ -394,76 +359,123 @@ def Ocitaj_zelenu():
     app.configure(0, 0, GREEN_HUE)
     wait(500)
     green_data = unpack("BBBB", app.get_bytes(0))
+    print("Green before check:", green_data)
     xg,yg,wg,hg = green_data
     if(wg<7 and hg<7):
         green_data = (0,0,0,0)
-    print("Green:", green_data)
+    print("Green after check:", green_data)
 
-def Jedna_strana_uljevo():
-    car.default_speed = 350
-    car.straight(150)
-    Ocitaj_crvenu()
-    global red_data
-    if(red_data != (0,0,0,0)):
-        xr,yr,wr,hr = red_data
+def Drive_until_boja():
+    global red_data, green_data
+    steer.run_target(300, 0)
+    red_data = (0, 0, 0, 0)
+    green_data = (0, 0, 0, 0)
+    car.drive(170)
+    boja = None
+    while boja is None:
+        car.correct(step=5)
+        Ocitaj_crvenu()
+        if red_data != (0, 0, 0, 0):
+            boja = "RED"
+            break
+        Ocitaj_zelenu()
+        if green_data != (0, 0, 0, 0):
+            boja = "GREEN"
+        wait(10)
+    car.brake()
+    return boja
+
+
+def Zaobidji_boju():
+    boja = Drive_until_boja()
+    print("Detektirana boja:", boja)
+
+    steer.run_target(200,0)
+    wait(500)
+    car.default_speed = 300
+    car.use_gyro(False)
+    car.straight(-150)
+    wait(500)
+    car.use_gyro(True)
+
+    if boja == "RED":
+        bypass_c_continuous2(car, S_arc=692, delta_max_deg=30, direction=1)
+        car.turn(90,-30,speed_drive=250, speed_steer=200)
+        steer.run_target(200,0)
+        wait(500)
+        #mozda tu treba paziti na distance od zida naprijed!!!
+        car.turn(90,30,speed_drive=250, speed_steer=200)
+    elif boja == "GREEN":
+
+        bypass_c_continuous2(car, S_arc=692, delta_max_deg=30, direction=-1)
+        car.turn(90,30,speed_drive=250, speed_steer=200)
+        steer.run_target(200,0)
+        wait(500)
+        #mozda tu treba paziti na distance od zida naprijed!!!
+        car.turn(90,-30,speed_drive=250, speed_steer=200)
+    
+
+def Odlazak_s_parkinga():
+    steer.run_target(200,0)
+    if(right_sensor.distance()>200):
+        car.default_speed=190
         car.use_gyro(False)
-        car.turn(20, 25)
-        car.use_gyro(True)
-        car.drive()
-        while(xr > 5 or xr != 0):
-            car.correct()
-            Ocitaj_zelenu()
-            xr,yr,wr,hr = red_data
-        car.brake()
-        car.turn(15,20,-1)
-
-def Jedna_strana_udesno():
-    car.default_speed = 350
-    car.straight(150)
-    Ocitaj_zelenu()
-    global green_data
-    if(green_data != (0,0,0,0)):
-        xg,yg,wg,hg = green_data
+        #car.straight(-90)
+        #wait(3000)
+        car.turn(-40,-40)
+        wait(3000)
+        car.turn(120,40)
+        wait(3000)
+        car.turn(120,-40)
+        wait(3000)
+        car.turn(40,40)
+        car.straight(-500)
+        wait(3000)
+    else:
+        car.default_speed=190
         car.use_gyro(False)
-        car.turn(20, 25, -1)
-        car.use_gyro(True)
-        car.drive()
-        while(xg < 95 or xg != 0):
-            car.correct()
-            Ocitaj_zelenu()
-            xg,yg,wg,hg = green_data
-        car.brake()
-        car.turn(15,20)
+        #car.straight(-90)
+        #wait(3000)
+        car.turn(-40,40)
+        wait(3000)
+        car.turn(120,-40)
+        wait(3000)
+        car.turn(120,40)
+        wait(3000)
+       # car.turn(40,40)
+        car.straight(-500)
+        wait(3000)
+       
+        # car.turn(25,-40)
+        # wait(3000)
+        # car.turn(25,40)
+        # wait(3000)
+        # car.turn(20,20)
+    car.use_gyro(True)   
+
+#Odlazak_s_parkinga()
 
 
-while True:
-    Ocitaj_crvenu()
-    Ocitaj_zelenu()
+
+steer.run_target(200,20)
+car._straight(300,_gyro=False)
+
+# car.default_speed = 300
+# boja = Drive_until_boja()
+# print("Detektirana boja:", boja)
+# distance = []
+# for i in range(10):
+#     distance.append(front_sensor.distance())
+#     steer.run_angle(200,5)
+#     wait(10)
+# steer.run_target(300, 0)
+# dist = min(distance)
+# print(dist)
+# car.bypass_obstacle(300,dist)
+# print("Finished")
+
+
+print("battery: ",hub.battery.voltage())
     
 
 
-#detekcija()
-
-
-try:
-    pocetak()
-    if(strana == "LEFT"):
-        okrenutLijevo()
-    elif(strana == "RIGHT"):
-        okrenutDesno()
-    #car.straight(100)
-    
-finally:
-    print("\n battery: ",hub.battery.voltage())
-    
-
-
-# while True:
-#     boja = color_sensor.color()
-#     print(IMENA_BOJA.get(boja, str(boja)))
-
-# for i in range(4):
-#     car.turn(90, 30)
-#     hub.speaker.beep()
-#     car.straight(1000)
-#     hub.speaker.beep()

@@ -168,8 +168,8 @@ car = CarDriveBase(drive, steer, 62.4, 11, 500, 300, hub) #(drive, steer, 62.4, 
 
 #left_sensor = UltrasonicSensor(Port.E)
 right_sensor = UltrasonicSensor(Port.A)
-left_color_sensor = ColorSensor(Port.B)
-right_color_sensor = ColorSensor(Port.E)
+color_sensor = ColorSensor(Port.B)
+# right_color_sensor = ColorSensor(Port.E)
 front_sensor = UltrasonicSensor(Port.C)
 
 def gumb():
@@ -192,7 +192,7 @@ st = 500  # 3
 NARANCASTA = Color(h=25, s=100, v=100)
 PLAVA = Color(h=228, s=100, v=100)
 BIJELA = Color(h=60, s=0, v=100)
-left_color_sensor.detectable_colors([NARANCASTA, PLAVA, BIJELA])
+color_sensor.detectable_colors([NARANCASTA, PLAVA, BIJELA])
 
 
 IMENA_BOJA = {
@@ -214,13 +214,11 @@ def pocetak():
     car.drive()
     while flag == 1:
         car.correct()
-        bojaRawL = left_color_sensor.color()
-        bojaRawR = right_color_sensor.color()
+        bojaRaw = color_sensor.color()
         #print("bojaRAW:", bojaRaw)
-        bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
-        bojaR = IMENA_BOJA.get(bojaRawR, str(bojaRawR))
+        boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
         #print("boja:", boja)
-        if(bojaL == "NARANCASTA" or bojaL == "PLAVA" or bojaR == "NARANCASTA" or bojaR == "PLAVA"):
+        if(boja == "NARANCASTA" or boja == "PLAVA"):
             # hub.speaker.beep()
             car.brake()
             wait(500)
@@ -231,9 +229,9 @@ def pocetak():
             flag = 2
         
         if(flag == 0):
-            if(bojaL == "NARANCASTA" or bojaR == "NARANCASTA"):
+            if(boja == "NARANCASTA" ):
                 strana = "LEFT"
-            elif(bojaL == "PLAVA" or bojaR == "PLAVA"):
+            elif(boja == "PLAVA" ):
                 strana = "RIGHT"
         elif(flag == 2):
             if(right_sensor.distance() > 1000):
@@ -271,14 +269,11 @@ def okrenutLijevo():
     for i in range(11):
         check_target=0
         car.drive()
-        bojaL = "BIJELA"
-        bojaR = "BIJELA"
-        while (bojaL != "NARANCASTA" and bojaR != "NARANCASTA" and front_sensor.distance() > 500):
+        boja = "BIJELA"
+        while (boja != "NARANCASTA" and front_sensor.distance() > 500):
             car.correct()
-            bojaRawL = left_color_sensor.color()
-            bojaRawR = right_color_sensor.color()
-            bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
-            bojaR = IMENA_BOJA.get(bojaRawR, str(bojaRawR))
+            bojaRaw = color_sensor.color()
+            bojaL = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
             wait(10)
         car.brake()
 
@@ -324,13 +319,10 @@ def okrenutDesno():
         check_target=0
         car.drive()
         bojaL = "BIJELA"
-        bojaR = "BIJELA"
-        while (bojaL != "PLAVA" and bojaR != "PLAVA" and front_sensor.distance() > 500):
+        while (boja != "PLAVA" and front_sensor.distance() > 500):
             car.correct()
-            bojaRawL = left_color_sensor.color()
-            bojaRawR = right_color_sensor.color()
-            bojaL = IMENA_BOJA.get(bojaRawL, str(bojaRawL))
-            bojaR = IMENA_BOJA.get(bojaRawLR, str(bojaRawR))
+            bojaRaw = color_sensor.color()
+            boja = IMENA_BOJA.get(bojaRaw, str(bojaRaw))
             wait(10)
         car.brake()
         # car.drive()
