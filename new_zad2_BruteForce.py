@@ -821,3 +821,5 @@ def krug():
         car.straight(150)
 
 krug()
+
+

@@ -156,7 +156,7 @@ class CarDriveBase:
         print("step_deg",step_deg)
         self.turn(target_deg, step_deg, tolerance, speed_steer, speed_drive)
         print("turn radius stao")
-        wait(100)
+        wait(50)
 
 hub = PrimeHub(front_side=Axis.Y)
 print(hub.battery.voltage())
@@ -164,7 +164,7 @@ print(hub.battery.voltage())
 drive = Motor(Port.F, Direction.COUNTERCLOCKWISE)
 steer = Motor(Port.D)
 
-car = CarDriveBase(drive, steer, 62.4, 11, 500, 300, hub) #(drive, steer, 62.4, 10, 450, 300, hub)
+car = CarDriveBase(drive, steer, 62.4, 11, 600, 300, hub) #(drive, steer, 62.4, 10, 450, 300, hub)
 
 #left_sensor = UltrasonicSensor(Port.E)
 right_sensor = UltrasonicSensor(Port.A)
@@ -178,7 +178,7 @@ def gumb():
         pressed = hub.buttons.pressed()
         wait(10)
 
-wall = 1000
+wall = 1015
 turn_r = 290 # 330
 
 # st = 0  # 1
@@ -207,10 +207,10 @@ def pocetak():
     car.use_gyro(True)
     global strana
     steer.run_target(100, 0)
-    wait(500)
+    wait(300)
     #steer.reset_angle(0)
     flag = 1
-    wait(200)
+    wait(100)
     car.drive()
     while flag == 1:
         car.correct()
@@ -221,11 +221,11 @@ def pocetak():
         if(boja == "NARANCASTA" or boja == "PLAVA"):
             # hub.speaker.beep()
             car.brake()
-            wait(500)
+            wait(100)
             flag = 0
         elif(front_sensor.distance()<450):
             car.brake()
-            wait(500)
+            wait(100)
             flag = 2
         
         if(flag == 0):
@@ -263,7 +263,7 @@ def okrenutLijevo():
     dist = dist/5
     car.straight(-(wall - st - dist))
     dist = car.distance()
-    wait(500)
+    wait(100)
     car.turn_radius(90, turn_r)
 
     for i in range(11):
@@ -283,7 +283,7 @@ def okrenutLijevo():
         for i in range(10):
             distance.append(front_sensor.distance())
             steer.run_angle(200,5)
-            wait(10)
+            wait(5)
         steer.run_target(300, 0)
         for i in range(3):
             distance.remove(min(distance))
@@ -293,11 +293,11 @@ def okrenutLijevo():
 
 
 
-        hub.speaker.beep()
+        #hub.speaker.beep(duration=)
         print("---", front_sensor.distance(), i, hub.imu.heading())
         # gumb()
         car.straight(-(wall - st - dist))
-        wait(500)        
+        wait(100)        
         car.turn_radius(90, turn_r)
         
 
@@ -312,13 +312,13 @@ def okrenutDesno():
     car.brake()
     car.straight(-(wall - st - front_sensor.distance()))
     dist = car.distance()
-    wait(500)
+    wait(100)
     car.turn_radius(90, -turn_r)
 
     for i in range(11):
         check_target=0
         car.drive()
-        bojaL = "BIJELA"
+        boja = "BIJELA"
         while (boja != "PLAVA" and front_sensor.distance() > 500):
             car.correct()
             bojaRaw = color_sensor.color()
@@ -347,14 +347,13 @@ def okrenutDesno():
 
 
 
-        hub.speaker.beep()
+        #hub.speaker.beep()
         print("---", front_sensor.distance(), i, hub.imu.heading())
         # gumb()
         car.straight(-(wall - st - dist))
         #car.use_gyro(True)
-        wait(500)
+        wait(100)
         car.turn_radius(90, -turn_r) #90 - i / 10
-
 
     car.straight(200)
 
@@ -366,7 +365,7 @@ try:
         okrenutLijevo()
     elif(strana == "RIGHT"):
         okrenutDesno()
-    #car.straight(100)
+    car.straight(300)
     
 finally:
     print("\n battery: ",hub.battery.voltage())
