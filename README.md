@@ -23,7 +23,7 @@
 
 ---
 
-# Team Information
+# 👥 Team Information
 
 **Team name:** Controlled C.H.A.O.S.  
 **Location:** Josipovac, Croatia  
@@ -35,12 +35,12 @@
 Both team members have vast experience in robotics, programming, mathematics and technical competitions.
 
 In the previous WRO season, the team achieved:
-- 2nd place at WRO Open Championship Slovenia  
+- 🥈 2nd place at WRO Open Championship Slovenia  
 - RoboMission Junior category experience  
 
 ---
 
-# Project Overview
+# 📌 Project Overview
 
 This project represents the development of an autonomous vehicle designed for the WRO Future Engineers competition.
 
@@ -78,7 +78,7 @@ to
 
 ---
 
-# Mechanical Design and Reasoning
+# 🔧 Mechanical Design and Reasoning
 
 We selected LEGO SPIKE Prime due to:
 - familiarity from previous competitions  
@@ -102,7 +102,7 @@ We selected LEGO SPIKE Prime due to:
 
 ---
 
-# Sensor Strategy and Early Problems
+# 📡 Sensor Strategy and Early Problems
 
 Initial system used ultrasonic sensors for wall centering using PID control.
 
@@ -124,7 +124,7 @@ This significantly improved stability.
 
 ---
 
-# Gyroscope Integration
+# 🧭 Gyroscope Integration
 
 Gyroscope was introduced for:
 - heading stability  
@@ -140,7 +140,7 @@ Hybrid correction system:
 
 ---
 
-# Vision System and Obstacle Detection
+# 📷 Vision System and Obstacle Detection
 
 Initial system:
 - HuskyLens + ESP32  
@@ -159,7 +159,7 @@ Initial system:
 
 ---
 
-# Obstacle Strategy
+# 🚧 Obstacle Strategy
 
 Robot behavior depends on track direction.
 
@@ -176,7 +176,7 @@ Obstacle avoidance is **continuous feedback**, not path planning.
 
 ---
 
-# Navigation Strategy
+# 🛣️ Navigation Strategy
 
 Default mode:
 > outer wall following
@@ -188,7 +188,7 @@ Default mode:
 
 ---
 
-# Sensor Reliability and Error Handling
+# 📊 Sensor Reliability and Error Handling
 
 ### Ultrasonic issues:
 - random spikes  
