@@ -236,18 +236,85 @@ class PrimeHub {
 public:
     class IMU {
     public:
-        void reset_heading(float value = 0.0f) {
-            (void)value;
-            // TODO: replace with your real IMU code
+        bool begin(uint8_t addr = 0x68) {
+            address = addr;
+
+            writeReg(0x6B, 0x00);   // wake up (clear sleep bit)
+            writeReg(0x1A, 0x03);   // digital low-pass filter ~44 Hz
+            writeReg(0x1B, 0x08);   // gyro range ±500 °/s -> 65.5 LSB per °/s
+
+            // Check the sensor answers (WHO_AM_I is 0x68)
+            Wire.beginTransmission(address);
+            Wire.write(0x75);
+            if (Wire.endTransmission(false) != 0) return false;
+            Wire.requestFrom(address, (uint8_t)1);
+            if (!Wire.available() || Wire.read() != 0x68) return false;
+
+            calibrate();
+            heading_deg = 0.0f;
+            lastMicros = micros();
+            return true;
         }
 
+        // Measure gyro bias while the robot is stationary.
+        void calibrate(int samples = 500) {
+            long sum = 0;
+            for (int i = 0; i < samples; i++) {
+                sum += readGyroZRaw();
+                delay(2);
+            }
+            gyroBias = (float)sum / samples;
+        }
+
+        // Must be called often (every loop, ideally >100 Hz).
+        void update() {
+            uint32_t now = micros();
+            float dt = (now - lastMicros) * 1e-6f;   // unsigned subtraction survives rollover
+            lastMicros = now;
+
+            float rate = (readGyroZRaw() - gyroBias) / 65.5f;   // °/s
+            if (fabsf(rate) < 0.05f) rate = 0;                  // small deadband against noise
+            heading_deg -= rate * dt;   // minus: sensor Z is counter-clockwise, Pybricks is clockwise-positive
+        }
+
+        void reset_heading(float value = 0.0f) {
+            heading_deg = value;
+        }
+
+        // Continuous (not wrapped) angle in degrees, clockwise positive.
         float heading() const {
-            // TODO: replace with your real IMU code
-            return 0.0f;
+            return heading_deg;
+        }
+
+    private:
+        uint8_t address = 0x68;
+        volatile float heading_deg = 0.0f;
+        float gyroBias = 0.0f;
+        uint32_t lastMicros = 0;
+
+        void writeReg(uint8_t reg, uint8_t val) {
+            Wire.beginTransmission(address);
+            Wire.write(reg);
+            Wire.write(val);
+            Wire.endTransmission();
+        }
+
+        int16_t readGyroZRaw() {
+            Wire.beginTransmission(address);
+            Wire.write(0x47);                       // GYRO_ZOUT_H
+            Wire.endTransmission(false);
+            Wire.requestFrom(address, (uint8_t)2);
+            int16_t hi = Wire.read();
+            int16_t lo = Wire.read();
+            return (hi << 8) | lo;
         }
     };
 
     IMU imu;
+
+    PrimeHub() {
+        imu.begin();
+    }
 };
 }  // namespace hubs
 }  // namespace pybricks
