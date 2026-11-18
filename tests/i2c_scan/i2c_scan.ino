@@ -18,7 +18,7 @@ void scan(bool skipMainBus) {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(5000);
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
   channel(-1);
   Serial.print("Main bus:");

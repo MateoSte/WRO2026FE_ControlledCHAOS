@@ -4,6 +4,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <Wire.h>
 
 namespace pybricks {
 namespace parameters {
@@ -14,11 +15,53 @@ enum class Direction : short {
 }  // namespace parameters
 
 namespace pupdevices {
-static const int8_t QEM[16] = {
-    0, -1,  1,  0,
-    1,  0,  0, -1,
-   -1,  0,  0,  1,
-    0,  1, -1,  0
+
+class Servo {
+public:
+    int pin;
+    float max_deg;          // puni raspon servo motora (270 za SER0046, 180 za MG995)
+    int min_us, max_us;     // širina impulsa za 0 i max_deg
+    float limit_min, limit_max;   // sigurnosne granice u stupnjevima
+
+    Servo(const Servo&) = delete;
+    Servo& operator=(const Servo&) = delete;
+
+    Servo(int pin, float max_deg = 270.0f, int min_us = 500, int max_us = 2500,
+          float limit_min = 0.0f, float limit_max = -1.0f)
+        : pin(pin), max_deg(max_deg), min_us(min_us), max_us(max_us),
+          limit_min(limit_min),
+          limit_max(limit_max < 0 ? max_deg : limit_max) {}
+
+    // Call this in setup(), not at global scope
+    void begin() {
+        ledcAttach(pin, PWM_FREQ, PWM_BITS);   // 50 Hz, 14 bita
+    }
+
+    // Ide na kut 0..max_deg (ograničeno na limit_min..limit_max)
+    void angle(float degrees) {
+        degrees = constrain(degrees, limit_min, limit_max);
+        current = degrees;
+        writeMicroseconds(min_us + degrees * (max_us - min_us) / max_deg);
+    }
+
+    // Zadnji zadani kut (servo nema povratnu vezu)
+    float angle() const { return current; }
+
+    void writeMicroseconds(int us) {
+        us = constrain(us, min_us, max_us);
+        ledcWrite(pin, (uint32_t)us * PWM_MAX / PERIOD_US);   // 20 000 us = 50 Hz
+    }
+
+    // Prestaje slati impuls (servo se može okretati rukom, nema drhtanja)
+    void release() { ledcWrite(pin, 0); }
+
+private:
+    static constexpr uint32_t PWM_FREQ  = 50;
+    static constexpr uint8_t  PWM_BITS  = 14;
+    static constexpr uint32_t PWM_MAX   = (1u << PWM_BITS) - 1;   // 16383
+    static constexpr uint32_t PERIOD_US = 20000;
+
+    float current = 0;
 };
 
 class Motor {
@@ -27,51 +70,49 @@ public:
     pybricks::parameters::Direction direction;
     float ppr, gear_ratio, counts_per_rev;
     volatile long encoderCount = 0;
-    volatile uint8_t lastState = 0;
 
     // Tuning
     float kp = 4.0f;            // PWM units per degree of error
     float kd = 0.1f;            // damping: PWM per deg/s
-    int   min_pwm = 60;         // overcomes friction/deadband
+    int   min_pwm = 60;         // overcomes friction/deadband (skala 0..255)
     float tolerance = 2.0f;     // degrees
     uint32_t timeout_ms = 5000;
 
     Motor(const Motor&) = delete;             // the ISR holds 'this'
     Motor& operator=(const Motor&) = delete;
 
+    // ppr = broj RISING bridova kanala A po okretaju MOTORA (ne 4x)
+    // Ako si u testu izmjerio impulse po okretaju KOTACA, daj ppr = taj broj, gear_ratio = 1
     Motor(int pwma, int ain1, int ain2, int stby, int enc1, int enc2,
           float ppr, float gear_ratio,
           pybricks::parameters::Direction direction = pybricks::parameters::Direction::CLOCKWISE)
         : pwma(pwma), ain1(ain1), ain2(ain2), stby(stby), enc1(enc1), enc2(enc2),
           direction(direction), ppr(ppr), gear_ratio(gear_ratio)
     {
-        counts_per_rev = ppr * 4.0f * gear_ratio;
+        counts_per_rev = ppr * gear_ratio;
     }
 
     // Call this in setup(), not at global scope
     void begin() {
-        pinMode(pwma, OUTPUT);
+        pinMode(stby, OUTPUT);
+        digitalWrite(stby, LOW);              // driver ugasen dok se sve ne podesi
+
         pinMode(ain1, OUTPUT);
         pinMode(ain2, OUTPUT);
-        pinMode(stby, OUTPUT);
+        ledcAttach(pwma, PWM_FREQ, PWM_BITS); // 20 kHz, 10 bita (0..1023)
+
         pinMode(enc1, INPUT_PULLUP);
         pinMode(enc2, INPUT_PULLUP);
-
-        digitalWrite(stby, HIGH);
-
-        lastState = (digitalRead(enc1) << 1) | digitalRead(enc2);
-        attachInterruptArg(digitalPinToInterrupt(enc1), isrTrampoline, this, CHANGE);
-        attachInterruptArg(digitalPinToInterrupt(enc2), isrTrampoline, this, CHANGE);
+        attachInterruptArg(digitalPinToInterrupt(enc1), isrTrampoline, this, RISING);
 
         stop();
+        digitalWrite(stby, HIGH);
     }
 
     // ---------- Sensing ----------
     // Unwrapped angle in degrees
     float rawAngle() const {
-        noInterrupts();
-        long count = encoderCount;
-        interrupts();
+        long count = encoderCount;            // 32-bit read je atomaran na ESP32
         float a = (count * 360.0f) / counts_per_rev;
         return a * static_cast<short>(direction);
     }
@@ -86,21 +127,17 @@ public:
     void run(int speed) {                      // speed: -255..255
         speed = constrain(speed, -255, 255);
         int s = speed * static_cast<short>(direction);
-        if (s > 0) {
-            digitalWrite(ain1, HIGH);
-            digitalWrite(ain2, LOW);
-            analogWrite(pwma, s);
-        } else if (s < 0) {
-            digitalWrite(ain1, LOW);
-            digitalWrite(ain2, HIGH);
-            analogWrite(pwma, -s);
-        } else {
+        if (s == 0) {
             stop();
+            return;
         }
+        digitalWrite(ain1, s > 0);
+        digitalWrite(ain2, s < 0);
+        ledcWrite(pwma, abs(s) * PWM_MAX / 255);
     }
 
     void stop() {                              // coast
-        analogWrite(pwma, 0);
+        ledcWrite(pwma, 0);
         digitalWrite(ain1, LOW);
         digitalWrite(ain2, LOW);
     }
@@ -109,7 +146,7 @@ public:
         targetActive = false;
         digitalWrite(ain1, HIGH);
         digitalWrite(ain2, HIGH);
-        analogWrite(pwma, 255);
+        ledcWrite(pwma, PWM_MAX);
     }
 
     // ---------- Position control ----------
@@ -137,14 +174,13 @@ public:
 
         uint32_t now = millis();
         float a = rawAngle();
-        if (now - prevT >= 10) {                       // velocity every 10 ms (less noisy)
+        if (now - prevT >= 10) {                       // velocity every 10 ms
             vel = (a - prevAngle) * 1000.0f / (now - prevT);
             prevAngle = a;
             prevT = now;
         }
         float error = targetAngle - a;
 
-        // done only when close AND almost stopped, or on timeout
         if ((fabs(error) <= tolerance && fabs(vel) < 20) || now - targetStart > timeout_ms) {
             brake();                                   // also clears targetActive
             return false;
@@ -153,7 +189,6 @@ public:
         int out = static_cast<int>(kp * error - kd * vel);
         out = constrain(out, -targetSpeed, targetSpeed);
 
-        // minimum power only while still outside the tolerance zone
         if (fabs(error) > tolerance) {
             if (out > 0 && out < min_pwm) out = min(min_pwm, targetSpeed);
             if (out < 0 && out > -min_pwm) out = -min(min_pwm, targetSpeed);
@@ -164,6 +199,10 @@ public:
     }
 
 private:
+    static constexpr uint32_t PWM_FREQ = 20000;
+    static constexpr uint8_t  PWM_BITS = 10;
+    static constexpr int      PWM_MAX  = (1 << PWM_BITS) - 1;   // 1023
+
     float targetAngle = 0;
     int targetSpeed = 0;
     uint32_t targetStart = 0;
@@ -177,10 +216,9 @@ private:
         static_cast<Motor*>(arg)->handleEncoder();
     }
 
+    // Kanal A RISING, smjer iz kanala B (isto kao u testu)
     void handleEncoder() {
-        uint8_t state = (digitalRead(enc1) << 1) | digitalRead(enc2);
-        encoderCount += QEM[(lastState << 2) | state];
-        lastState = state;
+        encoderCount += digitalRead(enc2) ? 1 : -1;
     }
 };
 }  // namespace pupdevices
@@ -333,23 +371,28 @@ float to_degrees(float radians_value) {
 
 class CarDriveBase {
 public:
-    // Motors are taken by REFERENCE (Motor can't be copied)
+    // steer_center = kut servo motora kad su kotači ravno (npr. STEER_CENTER = 73)
+    // Pozitivan kut skretanja = udesno (kazaljka na satu), kao i heading()
     CarDriveBase(
         pybricks::pupdevices::Motor& drive_motor,
-        pybricks::pupdevices::Motor& steer_motor,
+        pybricks::pupdevices::Servo& steer_servo,
         float wheel_diameter,
         float axle_track,
         int default_speed,
-        int default_steer_speed,
+        float steer_center,
         std::shared_ptr<pybricks::hubs::PrimeHub> hub)
         : drive_motor_(drive_motor),
-          steer_motor_(steer_motor),
+          steer_servo_(steer_servo),
           wheel_diameter_(wheel_diameter),
           axle_track_(axle_track),
           default_speed_(default_speed),
-          default_steer_speed_(default_steer_speed),
+          steer_center_(steer_center),
           hub_(std::move(hub)) {
     }
+
+    // Podešavanje
+    float steer_gain = 1.5f;        // stupnjeva skretanja po stupnju pogreške smjera
+    int   steer_settle_ms = 250;    // koliko čekati da servo stigne na kut
 
     void use_gyro(bool use) {
         if (hub_) {
@@ -364,18 +407,37 @@ public:
         }
     }
 
+    // Najveći mogući kut skretanja u jednu stranu (iz granica servo motora)
+    float max_steer() const {
+        return std::min(steer_center_ - steer_servo_.limit_min,
+                        steer_servo_.limit_max - steer_center_);
+    }
+
+    // Zakreće kotače: 0 = ravno, + = desno, - = lijevo. Vraća stvarno postavljen kut.
+    float steer(float deg, bool wait = false) {
+        const float m = max_steer();
+        deg = clamp_f(deg, -m, m);
+        steer_servo_.angle(steer_center_ + deg);
+        if (wait) {
+            pybricks::tools::wait(steer_settle_ms);
+        }
+        return deg;
+    }
+
+    // Regulacija smjera po žiroskopu (proporcionalna)
     void correct(float angle = 0.0f, float step = 30.0f, bool pr = false) {
         if (gyro_ && hub_) {
+            const float limit = std::min(std::abs(step), max_steer());
             const float target_step = clamp_f(
-                15.0f * std::ceil((angle - hub_->imu.heading()) / 15.0f),
-                -std::abs(step),
-                std::abs(step));
+                steer_gain * (angle - hub_->imu.heading()),
+                -limit,
+                limit);
 
             if (pr) {
                 Serial.println(target_step);
             }
 
-            steer_motor_.run_target(default_steer_speed_, target_step, false);
+            steer(target_step);
         }
     }
 
@@ -400,46 +462,51 @@ public:
     }
 
     void straight(float dist, float turn_rate = 0.0f, std::optional<int> speed = std::nullopt) {
-        steer_motor_.run_target(default_steer_speed_, 0.0f);
+        steer(0.0f, true);
         _straight(dist, turn_rate, speed);
     }
 
     void turn(float target_deg,
               float step_deg,
               float tolerance = 1.5f,
-              std::optional<int> speed_steer = std::nullopt,
+              std::optional<int> speed_steer = std::nullopt,   // zadržano radi kompatibilnosti, servo ga ne koristi
               std::optional<int> speed_drive = std::nullopt) {
+        (void)speed_steer;
+
         if (target_deg == 0.0f) {
             return;
         }
 
         if (step_deg == 0.0f) {
-            steer_motor_.run_target(default_steer_speed_, 0.0f);
+            steer(0.0f, true);
             return;
         }
 
         const float ta = target_deg / std::abs(target_deg);
-        const float sa = step_deg / std::abs(step_deg);
-        const int used_speed_steer = speed_steer.value_or(default_steer_speed_);
         const int used_speed_drive = speed_drive.value_or(default_speed_);
 
-        const float axle_track_mm = axle_track_ * 10.0f;
-        const float dist = (ta * (std::abs(target_deg) + std::abs(step_deg)) * axle_track_mm * static_cast<float>(M_PI)) /
-                          (std::tan((std::abs(step_deg) * static_cast<float>(M_PI)) / 180.0f) * 180.0f);
+        // Stvarni kut skretanja ograničen je servo motorom, pa se račun radi s njim
+        const float applied = steer(step_deg, true);
+        const float sa = applied / std::abs(applied);
+        const float step_abs = std::abs(applied);
 
-        steer_motor_.run_target(used_speed_steer, step_deg);
-        _straight(dist, 0.0f, used_speed_drive);       // fixed argument order
+        const float axle_track_mm = axle_track_ * 10.0f;
+        const float dist = (ta * (std::abs(target_deg) + step_abs) * axle_track_mm * static_cast<float>(M_PI)) /
+                          (std::tan((step_abs * static_cast<float>(M_PI)) / 180.0f) * 180.0f);
+
+        _straight(dist, 0.0f, used_speed_drive);
 
         if (gyro_ && hub_) {
             bool started = false;
             int i = 0;
 
             while (std::abs(std::abs(hub_->imu.heading()) - std::abs(target_deg)) > tolerance) {
+                hub_->imu.update();
                 if (!started) {
                     drive(static_cast<int>(ta * used_speed_drive));
                 }
                 started = true;
-                correct(sa * target_deg, step_deg, i == 0);
+                correct(sa * target_deg, step_abs, i == 0);
                 pybricks::tools::wait(5);
                 ++i;
                 i %= 50;
@@ -479,21 +546,22 @@ private:
 
         while (std::abs(drive_motor_.rawAngle() - start) < std::abs(degrees)) {
             if (gyro_ && hub_) {
+                hub_->imu.update();
                 correct(turn_rate);
             }
             pybricks::tools::wait(5);
         }
 
         drive_motor_.brake();
-        running_ = false;
+        running_= false;
     }
 
     pybricks::pupdevices::Motor& drive_motor_;
-    pybricks::pupdevices::Motor& steer_motor_;
+    pybricks::pupdevices::Servo& steer_servo_;
     float wheel_diameter_;
     float axle_track_;
     int default_speed_;
-    int default_steer_speed_;
+    float steer_center_;
     std::shared_ptr<pybricks::hubs::PrimeHub> hub_;
     bool gyro_ = false;
     bool running_ = false;
