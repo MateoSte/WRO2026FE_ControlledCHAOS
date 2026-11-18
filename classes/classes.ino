@@ -1,3 +1,5 @@
+#ifndef FE_CLASSES
+#define FE_CLASSES
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -496,3 +498,4 @@ private:
     bool gyro_ = false;
     bool running_ = false;
 };
+#endif
