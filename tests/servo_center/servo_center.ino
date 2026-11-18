@@ -1,4 +1,4 @@
-#include "../includes/includes.ino"
+#include "../../includes/includes.ino"
 
 const int SERVO_PIN = PIN_SRV_STEER;    // for the camera tower: PIN_SRV_TOWER
 

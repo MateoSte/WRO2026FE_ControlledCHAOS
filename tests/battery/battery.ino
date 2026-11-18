@@ -1,4 +1,4 @@
-#include "../includes/includes.ino"
+#include "../../includes/includes.ino"
 
 const float FACTOR = (100.0 + 22.0) / 22.0;   // 100k / 22k divider; adjust to match the multimeter
 

@@ -1,5 +1,5 @@
 #include <Wire.h>
-#include "../includes/includes.ino"
+#include "../../includes/includes.ino"
 
 void channel(int k) {                   // k = -1 closes all channels
   Wire.beginTransmission(MUX_ADDR);
