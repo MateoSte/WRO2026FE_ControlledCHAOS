@@ -1,5 +1,9 @@
 #include "../classes/classes.ino"
 
+using namespace pybricks::pupdevices;
+
+Motor left(7, 4, 5, 10, 12, 13, 11.0f, 100.0f);
+
 void setup() {
     Serial.begin(115200);
     left.begin();

@@ -496,9 +496,3 @@ private:
     bool gyro_ = false;
     bool running_ = false;
 };
-
-// ---------- Your robot (one motor for now) ----------
-using namespace pybricks::pupdevices;
-
-// pwma, ain1, ain2, stby, enc1, enc2, ppr, gear_ratio  (use YOUR ppr and gear ratio)
-Motor left(7, 4, 5, 10, 12, 13, 11.0f, 100.0f);
