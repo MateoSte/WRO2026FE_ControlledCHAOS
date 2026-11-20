@@ -17,6 +17,7 @@
 //
 //  Potrebno: ChaosPins.h i ChaosCheck.h u istoj mapi, biblioteka "VL53L1X" by Pololu.
 //  Pokretanje: START tipkalo ili 's' u Serial Monitoru (115200).
+//  ToF test:   't' u Serial Monitoru (bez voznje, bilo koja tipka ga zaustavlja).
 // =====================================================================
 #include <Wire.h>
 #include <VL53L1X.h>
@@ -26,19 +27,19 @@
 // ---------------- STAZA ----------------
 const int   LAPS            = 3;
 const int   TURNS_PER_LAP   = 4;
-const float WALL_TARGET_MM  = 300.0;  // 30 cm od vanjskog zida (od lica senzora)
-const int   FRONT_STOP_MM   = 500;    // stani 50 cm prije prednjeg zida
+const float WALL_TARGET_MM  = 200.0;  // 20 cm od vanjskog zida (od lica senzora)
+const int   FRONT_STOP_MM   = 400;    // stani 40 cm prije prednjeg zida
 const float MIN_STRAIGHT_MM = 300.0;  // nakon skretanja ne gledaj prednji senzor prvih 30 cm
 const int   EMERGENCY_MM    = 150;    // zid blize od 15 cm = HITNI STOP, uvijek
 const bool  STOP_AT_CORNERS = true;   // true = stane pred svakim zavojem (kao u prvom)
 
 // ---------------- BRZINE ----------------
-const int   DRIVE_PWM       = 110;
+const int   DRIVE_PWM       = 200;
 const int   TURN_PWM        = 100;
 
 // ---------------- GEOMETRIJA (IZMJERITI!) ----------------
-const float TOF_SPACING_R_MM = 100.0; // TODO: razmak desni prednji <-> desni zadnji ToF
-const float TOF_SPACING_L_MM = 100.0; // TODO: razmak lijevi prednji <-> lijevi zadnji ToF
+const float TOF_SPACING_R_MM = 120.0; // TODO: razmak desni prednji <-> desni zadnji ToF
+const float TOF_SPACING_L_MM = 120.0; // TODO: razmak lijevi prednji <-> lijevi zadnji ToF
 
 // ---------------- REGULACIJA (iz voznja_desni_zid) ----------------
 const float KP_DIST         = 0.08;
@@ -56,6 +57,10 @@ const unsigned long STRAIGHT_TIMEOUT_MS = 10000;
 const unsigned long TURN_TIMEOUT_MS     = 5000;
 const bool  BEZ_MOTORA      = false;
 
+// ---------------- ToF VIDNO POLJE ----------------
+const uint8_t TOF_ROI_SIZE   = 4;     // 4x4 SPAD = najuze moguce (~15 st.); 16 = puno (~27 st.)
+const uint8_t TOF_ROI_CENTER = 199;   // sredina SPAD polja (gleda ravno)
+
 // ---------------- MG995 (isto kao servo_center.ino) ----------------
 const int   STEER_US_MIN    = 500;
 const int   STEER_US_MAX    = 2500;
@@ -68,6 +73,7 @@ struct Tof {
   uint8_t ch;
   int     last;    // zadnje valjano ocitanje (mm), -1 = nema cilja / neispravno
   bool    fresh;   // true = upravo stiglo novo mjerenje
+  uint8_t status;  // zadnji range_status (0 = valjano), za dijagnostiku
 };
 
 Tof tofRF = {VL53L1X(), MUX_TOF_RIGHT_FRONT, -1, false};
@@ -132,6 +138,8 @@ bool initTof(Tof &t) {
   t.s.setTimeout(100);
   if (!t.s.init()) return false;
   t.s.setDistanceMode(VL53L1X::Short);
+  t.s.setROISize(TOF_ROI_SIZE, TOF_ROI_SIZE);   // uzi stozac
+  t.s.setROICenter(TOF_ROI_CENTER);
   t.s.setMeasurementTimingBudget(33000);
   t.s.startContinuous(40);
   return true;
@@ -142,6 +150,7 @@ int readTof(Tof &t) {                 // ne ceka
   t.fresh = false;
   if (t.s.dataReady()) {
     t.s.read(false);
+    t.status = (uint8_t)t.s.ranging_data.range_status;
     t.last  = (t.s.ranging_data.range_status == VL53L1X::RangeValid) ? t.s.ranging_data.range_mm : -1;
     t.fresh = true;
   }
@@ -277,6 +286,7 @@ long driveStraight(int side, long targetPulses, float ignoreFrontMm) {
     if (side != 0) {
       Tof &fr = (side > 0) ? tofRF : tofLF;
       Tof &re = (side > 0) ? tofRR : tofLR;
+      
       int dF = readTof(fr);
       int dR = readTof(re);
       float spacing = (side > 0) ? TOF_SPACING_R_MM : TOF_SPACING_L_MM;
@@ -397,6 +407,82 @@ void runChallenge() {
 }
 
 // =====================================================================
+//  ToF TEST  ('t' u Serial Monitoru, bilo koja tipka ga zaustavlja)
+//    Uzivo ispisuje svih 5 senzora + udaljenost i nagib zida za svaku stranu.
+//    Na kraju daje statistiku: frekvenciju, % neispravnih, min/prosjek/max.
+//    Motor se ne pokrece. Drzi robota ispred ravnog zida i pomicji ga rukom.
+// =====================================================================
+void printWall(int dF, int dR, float spacing) {
+  if (dF > 0 && dR > 0) {
+    float ang  = atan2f((float)(dF - dR), spacing) * 180.0 / PI;
+    float dist = (dF + dR) / 2.0 * cosf(ang * PI / 180.0);
+    Serial.printf(" %6.0f %6.1f", dist, ang);
+  } else {
+    Serial.print("      -      -");
+  }
+}
+
+void testTof() {
+  Tof *all[5] = {&tofRF, &tofRR, &tofLF, &tofLR, &tofF};
+  const char *name[5] = {"RF", "RR", "LF", "LR", "F "};
+  long sum[5] = {0, 0, 0, 0, 0};
+  long ok[5]  = {0, 0, 0, 0, 0};
+  long bad[5] = {0, 0, 0, 0, 0};
+  int  mn[5], mx[5];
+  for (int i = 0; i < 5; i++) { mn[i] = 32767; mx[i] = 0; }
+
+  motorOff();
+  steerTo(STEER_CENTER);
+  while (Serial.available()) Serial.read();
+  Serial.println("\n=== ToF test (bilo koja tipka = kraj) ===");
+  Serial.println("    RF    RR    LF    LR     F |  desno: zid nagib |  lijevo: zid nagib | status RF RR LF LR F");
+
+  unsigned long t0 = millis(), lastPrint = 0;
+  while (!Serial.available()) {
+    for (int i = 0; i < 5; i++) {
+      int d = readTof(*all[i]);
+      if (!all[i]->fresh) continue;
+      if (d > 0) {
+        sum[i] += d;
+        ok[i]++;
+        if (d < mn[i]) mn[i] = d;
+        if (d > mx[i]) mx[i] = d;
+      } else {
+        bad[i]++;
+      }
+    }
+
+    if (millis() - lastPrint >= 200) {
+      lastPrint = millis();
+      Serial.printf("%6d%6d%6d%6d%6d |", tofRF.last, tofRR.last, tofLF.last, tofLR.last, tofF.last);
+      printWall(tofRF.last, tofRR.last, TOF_SPACING_R_MM);
+      Serial.print(" |");
+      printWall(tofLF.last, tofLR.last, TOF_SPACING_L_MM);
+      Serial.printf(" | st %u %u %u %u %u", tofRF.status, tofRR.status, tofLF.status, tofLR.status, tofF.status);
+      Serial.println();
+    }
+    delay(2);
+  }
+  while (Serial.available()) Serial.read();
+
+  float sec = (millis() - t0) / 1000.0;
+  Serial.printf("\n--- statistika (%.1f s) ---\n", sec);
+  Serial.println("sen    Hz  neispr%   min  prosjek   max  raspon");
+  for (int i = 0; i < 5; i++) {
+    long tot = ok[i] + bad[i];
+    if (tot == 0) { Serial.printf("%s   NEMA PODATAKA\n", name[i]); continue; }
+    Serial.printf("%s %6.1f %7.0f %5d %8.0f %5d %7d\n", name[i],
+                  tot / sec,
+                  100.0 * bad[i] / tot,
+                  ok[i] ? mn[i] : -1,
+                  ok[i] ? sum[i] / (float)ok[i] : -1.0f,
+                  ok[i] ? mx[i] : -1,
+                  ok[i] ? mx[i] - mn[i] : 0);
+  }
+  Serial.println("(ocekivano ~25 Hz; raspon = sum, manje je bolje)");
+}
+
+// =====================================================================
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -427,10 +513,17 @@ void setup() {
   if (!initTof(tofLR)) halt("lijevi zadnji ToF (kanal 4)");
 
   if (BEZ_MOTORA) Serial.println("*** BEZ_MOTORA = true: motor nece voziti ***");
-  Serial.println("Spreman. START ili 's'.");
+  Serial.println("Spreman. START ili 's', 't' = ToF test.");
 }
 
 void loop() {
+  int c = Serial.peek();
+  if (c == 't' || c == 'T') {           // ToF test, bez voznje
+    Serial.read();
+    testTof();
+    Serial.println("Spreman. START ili 's', 't' = ToF test.");
+    return;
+  }
   if (!startPressed()) return;
 
   Serial.println("Ne diraj robota - kalibracija ziroskopa...");

@@ -55,7 +55,7 @@ const uint8_t MUX_ADDR = 0x70;
 
 #define ENC_PULSES_PER_OUTPUT_REV  1050   // 7 x 150, rastuci bridovi kanala A
 #define ENC_PULSES_PER_WHEEL_REV   1050   // TODO: provjeriti rucno (1 okret kotaca)
-#define WHEEL_CIRCUMFERENCE_MM     PI*62.4f // pi x 43.2 mm
+#define WHEEL_CIRCUMFERENCE_MM     (PI*62.4f) // pi x 43.2 mm
 // TODO: provjeriti smjer brojanja (naprijed = brojac raste); ako pada, zamijeni ENC_A i ENC_B
 
 // ---------------------------------------------------------------------
