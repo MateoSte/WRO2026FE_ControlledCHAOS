@@ -78,7 +78,6 @@ const uint8_t MUX_ADDR = 0x70;
 #define TOWER_MAX_US      2500      // 270 st.
 #define TOWER_MV_CENTER   1517.0f   // povratni napon na 135 st. (izmjereno)
 #define TOWER_MV_PER_DEG  10.14f  // linearno (izmjereno 90-270 st.)
-#define TOWER_CENTER      81
 
 #define SERVO_PWM_FREQ  50    // Hz, oba servo motora
 #define SERVO_PWM_BITS  14    // 0-16383
