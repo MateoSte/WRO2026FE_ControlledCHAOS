@@ -149,6 +149,5 @@ const uint8_t MUX_ADDR = 0x70;
 
 Motor drive(PWMA, AIN1, AIN2, STBY, ENC_A, ENC_B, 7.0f, 150.0f, Direction::COUNTERCLOCKWISE);
 Servo steer(PIN_SRV_STEER, 180.0f, 500, 2500, STEER_LEFT, STEER_RIGHT);
-CarDriveBase car(drive, steer, 62.4f, 115.0f, 170.0f, STEER_CENTER, std::make_shared<PrimeHub>());
 
 #endif

@@ -20,7 +20,8 @@ void setup() {
   angle(TOWER_CENTER);                  // camera looks forward
   Serial.println("Type an angle (0-270, e.g. 135) and press Enter.");
 }
-
+//100,55,10
+//170,215,260
 void loop() {
   if (Serial.available()) {
     String s = Serial.readStringUntil('\n');

@@ -37,12 +37,12 @@ from machine import Pin, PWM, LED            # Pin = tipka SW, PWM = impulsi za 
 # morate ništa dirati.
 
 NACIN = "LIVE"                               # odabir načina rada: "LIVE", "KALIBRACIJA" ili "SKEN"
-SMJER = "CCW"                                # smjer vožnje koji testiramo: "CCW" (suprotno satu) ili "CW" (u smjeru sata)
+SMJER = "CW"                                 # smjer vožnje koji testiramo: "CCW" (suprotno satu) ili "CW" (u smjeru sata)
 
 # Kutovi tornja u stupnjevima, mjereno od smjera "ravno naprijed" (0 st.).
 # Za CCW se kamera okreće ULIJEVO, za CW skripta iste brojeve okreće UDESNO,
 # jer je unutrašnjost staze uvijek na strani prema kojoj robot skreće.
-KUTOVI = [30, 70, 110, 150]                  # 4 kuta po 40 st. razmaka; uz vidno polje ~64 st. pokrivaju ~-2 do ~182 st.
+KUTOVI = [35, 80, 125]                       # 4 kuta po 40 st. razmaka; uz vidno polje ~64 st. pokrivaju ~-2 do ~182 st.
 LIVE_KUT_INDEKS = 0                          # u LIVE načinu: indeks kuta (0-3) čije ROI-je crtamo na slici
 
 # --- Servo (opcionalno) ---
