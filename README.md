@@ -374,11 +374,7 @@ All structural parts are our own 3D-printed designs, made on the team's Bambu La
 
 ### 8.4 CAD model as built (v1.0)
 
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_final.png?raw=true)
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_front.png?raw=true)
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_left.png?raw=true)
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_rear.png?raw=true)
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_right.png?raw=true)
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/powerSupply_4.png?raw=true)
 
 The chassis we are finally statisfed with passes all automatic checks: every printed part is one solid, the tie-rod screws clear the plate over the full steering travel, and the camera head turns a full circle without collisions. The model was drawn with LEGO 43.2 × 22 mm wheels; the vehicle now runs on Ø 62.4 mm wheels on the same axles, with the mast shortened to keep the height at 290 mm.
 
@@ -473,9 +469,3 @@ Every major choice in v2 trades some capability for simplicity and reliability; 
 | Robots stay in the venue overnight  | No charging between days      | Spare charged cells; cells travel in carry-on luggage only                                               |
 | Rear-wheel slip at speed            | Odometry error, missed turns  | Ackermann, moderate speed, IMU heading as cross-check                                                    |
 | PETG/PLA-CF softening at 55–60 °C | Warped mast or mounts         | Keep the robot out of hot cars and direct sun, spare parts                                               |
-
-## Sources
-
-- [WRO 2026 Future Engineers General Rules](https://wro-association.org/wp-content/uploads/WRO-2026-Future-Engineers-Self-Driving-Cars-General-Rules.pdf) and [WRO Q&amp;A](https://wro-association.org/competition/questions-answers/)
-- [Waveshare DCGM-N20-12V-EN-200RPM motor](https://www.waveshare.com/wiki/DCGM-N20-12V-EN-200RPM)
-- Team documents: [Build Guide from Scratch](https://claude.ai/artifact/EPDg9YXoXYMDKx8tLLobB9), [Connection list](https://claude.ai/artifact/TsAJq3HKXFSMeF187m961Q), [3D chassis model v0.10](https://claude.ai/artifact/Q6GhRyY3HTYYwWfXV7hXVa)
