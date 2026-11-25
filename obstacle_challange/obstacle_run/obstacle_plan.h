@@ -24,6 +24,15 @@
 //  razlicite (trojka "R-G" kojoj boje traze razlicite trake), mijenja traku
 //  oko srednje linije L1 (po pravilu trojki tamo nema stupa).
 //  Promjena trake izmedju sekcija radi se u zavoju (biranjem trenutka zavoja).
+//
+//  TRIPLET RULE (WRO 2026 rules, Figure 8c - the 36 sign cards):
+//  a section holds EITHER one pillar on any of its lines ("X--", "-X-", "--X")
+//  OR two pillars on the two outer lines ("X-Y"). It is never empty, and a
+//  middle pillar is always alone. Consequences used by the planner:
+//    - a lane change is only ever needed in an "X-Y" section, and there the
+//      middle line L1 is guaranteed to be free, so the change is centred on L1;
+//    - a single pillar (on any line) fixes one lane for the whole section,
+//      so no lane change happens inside that section.
 // =====================================================================
 #pragma once
 #include <stdint.h>
@@ -73,7 +82,7 @@ struct Plan {
   char  map[LINES + 1];
   Visit v[VISITS];
   int   unknown;      // broj linija s '?'
-  int   badTriplets;  // trojke koje ne postuju pravilo ("-X-" ili "X-Y")
+  int   badTriplets;  // sections that break the triplet rule ("X--", "-X-", "--X" or "X-Y")
 };
 
 inline const char *laneName(int8_t lane) {
@@ -90,11 +99,16 @@ inline int8_t laneFor(char c, int dir) {
   return red ? IN : OUT;                  // CW:  unutarnji zid desno
 }
 
-// Pravilo trojki: "-X-" (sredina) ili "X-Y" (obje vanjske).
+// Triplet rule check for section s. Allowed layouts (Figure 8c of the rules):
+//   one pillar on any line  -> "X--", "-X-", "--X"
+//   two pillars             -> "X-Y" (always on the two outer lines)
+// '?' (unknown) never passes, so the robot prints a warning for it.
 inline bool tripletOk(const char *m, int s) {
   char a = m[3 * s], b = m[3 * s + 1], c = m[3 * s + 2];
-  if (a == '-' && isPillar(b) && c == '-') return true;
-  if (isPillar(a) && b == '-' && isPillar(c)) return true;
+  int n = isPillar(a) + isPillar(b) + isPillar(c);           // pillars in this section
+  int e = (a == '-') + (b == '-') + (c == '-');               // lines seen empty
+  if (n == 1 && e == 2) return true;                          // one pillar, on any line
+  if (n == 2 && isPillar(a) && b == '-' && isPillar(c)) return true;   // two pillars on the outer lines
   return false;
 }
 
@@ -137,7 +151,10 @@ inline void build(Plan &p, const char *map12, int dir, int startFirst, int finis
   if (startBlock >= 0 && p.map[startBlock] != '-') {
     p.v[0].forcedOut = true;
     p.v[0].entry = OUT;
-    if (p.v[0].freeLane) p.v[0].exit = NONE;  // izlaz ce dati sljedeca posjeta
+    // No pillar ahead in section 0 (e.g. CW "X--": the only pillar is behind
+    // the robot): stay in OUT for the whole visit; the corner turn moves the
+    // robot into the lane of section 1, so no extra lane change is needed.
+    if (p.v[0].freeLane) p.v[0].exit = OUT;
     p.v[0].freeLane = false;
   }
 

@@ -369,8 +369,8 @@ void printMapAndPlan(const char *raw, const char *m, const route::Plan &p) {
   Serial.printf("mapa (pravila):   %s\n", m);
   Serial.print  ("po sekcijama:     "); printGrouped(m); Serial.println();
   for (int s = 0; s < 4; s++)
-    if (!route::tripletOk(m, s))
-      Serial.printf("UPOZORENJE S%d: '%c%c%c' nije ni \"-X-\" ni \"X-Y\"\n", s, m[3 * s], m[3 * s + 1], m[3 * s + 2]);
+    if (!route::tripletOk(m, s))   // allowed: "X--", "-X-", "--X", "X-Y" (rules, Figure 8c)
+      Serial.printf("UPOZORENJE S%d: '%c%c%c' nije \"X--\", \"-X-\", \"--X\" ni \"X-Y\"\n", s, m[3 * s], m[3 * s + 1], m[3 * s + 2]);
   if (p.unknown) Serial.printf("UPOZORENJE: %d linija s '?' - za njih robot ne zna boju (zadrzava traku)\n", p.unknown);
   char buf[320];
   route::toText(p, buf, sizeof buf);
