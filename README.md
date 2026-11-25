@@ -469,3 +469,7 @@ Every major choice in v2 trades some capability for simplicity and reliability; 
 | Robots stay in the venue overnight  | No charging between days      | Spare charged cells; cells travel in carry-on luggage only                                               |
 | Rear-wheel slip at speed            | Odometry error, missed turns  | Ackermann, moderate speed, IMU heading as cross-check                                                    |
 | PETG/PLA-CF softening at 55–60 °C | Warped mast or mounts         | Keep the robot out of hot cars and direct sun, spare parts                                               |
+
+# Demonstration
+[Open challenge video](https://youtu.be/EeKzkzrl_B8)
+Obstacle challenge video
