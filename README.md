@@ -81,17 +81,17 @@ The motor and gears sit in a separate printed drive module, fixed to the bottom 
 
 **Speed estimate.** Rated no-load speed is 200 rpm at 12 V ([Waveshare](https://www.waveshare.com/wiki/DCGM-N20-12V-EN-200RPM)). With the 1:1 pair the wheels turn at motor-output speed:
 
-```latex
+$$
 v_{0} = \frac{n \cdot \pi d}{60} = \frac{200 \cdot 0.1960\ \text{m}}{60} \approx 0.65\ \text{m/s}
-```
+$$
 
 At the nominal pack voltage of 10.8 V the no-load speed drops to about 0.59 m/s; under load we expect 0.45–0.55 m/s, to be confirmed with the encoder. One lap on the 1000 mm corridor centreline is about 8 m, so three laps take roughly 45–55 s of driving of the 180 s round, plus the stops before corners. If more speed is needed, a 24 → 16 LEGO tooth pair could be an option as a replacement version.
 
 **Torque estimate.** Stall torque is at least 1.2 kg·cm (0.118 N·m). At the wheel radius of 31.2 mm:
 
-```latex
+$$
 F_{max} = \frac{\tau}{r} = \frac{0.118\ \text{N·m}}{0.0312\ \text{m}} \approx 3.8\ \text{N}
-```
+$$
 
 Even at the 1.5 kg mass limit this allows about 2.5 m/s² of acceleration before losses, far more than the course needs; the real limit is rear-wheel grip.
 
@@ -101,9 +101,9 @@ Even at the 1.5 kg mass limit this allows about 2.5 m/s² of acceleration before
 
 The MG995 servo sits upside down with its output shaft on the front-axle line and drives both knuckles through tie rods arranged for Ackermann geometry. Ackermann steering is optional under the rules; early v2 sketches used simple parallel steering as we had on Spike Prime first version, but we expected the inner front wheel to scrub and slip in tight turns, so v2 keeps an Ackermann linkage as v1 had in Croatian Finals. For a turn of radius R (measured to the middle of the rear axle) with wheelbase L and track W, the ideal angles are:
 
-```latex
+$$
 \tan\delta_{in} = \frac{L}{R - W/2}, \qquad \tan\delta_{out} = \frac{L}{R + W/2}
-```
+$$
 
 Example: for R = 300 mm, L = 100 mm and W = 110 mm, the inner wheel needs 22.2° and the outer 15.7°.
 
@@ -464,7 +464,7 @@ Every major choice in v2 trades some capability for simplicity and reliability; 
 | Unprotected Li-ion cells            | Short-circuit, over-discharge | 5 A fuse at the battery, cell voltages checked with a multimeter before every run, cells charged outside |
 | Robots stay in the venue overnight  | No charging between days      | Spare charged cells; cells travel in carry-on luggage only                                               |
 | Rear-wheel slip at speed            | Odometry error, missed turns  | Ackermann, moderate speed, IMU heading as cross-check                                                    |
-| PETG/PLA-CF softening at 55–60 °C | Warped mast or mounts         | Keep the robot out of hot cars and direct sun, spare parts                                              |
+| PETG/PLA-CF softening at 55–60 °C | Warped mast or mounts         | Keep the robot out of hot cars and direct sun, spare parts                                               |
 
 ## Sources
 
