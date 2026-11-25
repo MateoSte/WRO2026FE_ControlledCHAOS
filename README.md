@@ -121,6 +121,8 @@ The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduc
 
 One 3S Li-ion pack feeds three separated rails: the battery rail for the drive motor, a 5 V servo rail and a 5 V logic rail, so a servo current spike cannot reset the controller.
 
+![Power supply image](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/powerSupply_4.png)
+
 Everything after the switch hangs off the +BAT rail; all grounds meet at one star point on the perfboard.
 
 ### 4.1 Battery
@@ -174,9 +176,9 @@ All five are Soldered VL53L1X boards with easyC/Qwiic connectors. They share the
 
 Two sensors per side give both the distance to the wall and the vehicle's angle to it. With s the spacing between the front and rear sensor along the body:
 
-```latex
+$$
 \theta = \arctan\frac{d_{front} - d_{rear}}{s}, \qquad d_{wall} = \frac{d_{front} + d_{rear}}{2}\cos\theta
-```
+$$
 
 One sensor per side (as in v1 with ultrasonics) cannot tell "close to the wall" from "angled towards the wall". We considered a sixth sensor angled 45° forward for corner detection and set it aside; the front sensor and the IMU heading cover corners.
 
@@ -213,7 +215,7 @@ The position itself was moved around as we did the design process so we had few 
 
 The ESP32-S3 drives the motor and both servos directly and reads every sensor and the camera over one I²C bus split by the multiplexer; t. The as-built wire list in the connection list (added as a file to this repository).
 
-&#91;embedded content: controller connections · actuators left, I²C sensors right\]
+![Electronics and wiring](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/Electronics_and_wiring_6.png)
 
 Actuators are driven by direct PWM and GPIO lines; every sensor and the camera sit on one I²C bus behind the multiplexer.
 
@@ -234,7 +236,7 @@ Actuators are driven by direct PWM and GPIO lines; every sensor and the camera s
 | Qwiic | I²C bus                       | Multiplexer input     | SDA/SCL GPIO numbers to be recorded |
 
 The pins avoid the ESP32-S3 boot strapping pins (0, 3, 45, 46), USB (19, 20), flash and PSRAM (26–37) and the serial port (43, 44). The tower feedback input is on ADC1, which keeps working with the radio off or on (must be off during the rid). I²C must be started with the explicit Qwiic pin numbers, not a plain `Wire.begin()`. The board's BAT/JST Li-ion input is not used; the controller is fed only through VCC. IO47 is spare.
-
+Electronics_and_wiring_6.png
 ### 6.2 I²C map
 
 | Address | Device                                 | Where                                           |
@@ -299,9 +301,9 @@ The Open Challenge is solved by one sketch, [`open_challenge/open_challenge.ino`
 
 **Wall following.** With the two side sensors (equation in 5.1) the controller computes the distance d and angle θ to the outer wall and steers by:
 
-```latex
+$$
 \delta = \delta_{0} + s \cdot \left[ K_{d}\,(d - 200\ \text{mm}) + K_{\theta}\,\theta \right]
-```
+$$
 
 where δ₀ = 73° is straight ahead and s = +1 for the right wall, −1 for the left. When the wall is not seen (an invalid reading or more than 800 mm away), the controller falls back to holding the heading with the gyro.
 
@@ -319,7 +321,7 @@ where δ₀ = 73° is straight ahead and s = +1 for the right wall, −1 for the
 | `STOP_AT_CORNERS`                         | true             | Brief stop before each corner                      |
 | `TOF_SPACING_R_MM` / `_L_MM`            | 120              | Front-to-rear side sensor spacing (to be measured) |
 
-&#91;embedded content: Open Challenge program flow · open\_challenge.ino\]
+![Open challenge](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/Open_Challenge_7_4.png)
 
 The direction is decided once, at the first wall; every lap after that repeats the same turn-and-follow pair.
 
@@ -361,14 +363,14 @@ All structural parts are our own 3D-printed designs, made on the team's Bambu La
 | v0.9    | Perfboard adapter on the deck standoffs                                                                                    | Board holes are central, deck standoffs are at the corners                                                                                                                                      |
 | v0.8    | Top deck raised, switch and button cut-outs moved in, mast shortened to 290 mm, 15° camera fork, taller servo-mount walls | Matched the team's real deck height; full tower turn checked for collisions                                                                                                                     |
 | v0.7    | N20 tunnel with end stop and M3 clamp                                                                                      | In v0.6 the motor sat on a flat saddle held by cable ties                                                                                                                                       |
-| v0.6    | Steering raised 6 mm, solid servo mounts, larger M3 holes                                                                  | First print: tie-rod screws hit the plate, mounts cracked, holes too tight                                                                                                                      |
+| v0.6    | Steering raised 6 mm, solid servo mounts, larger M3 holes                                                       CAD           | First print: tie-rod screws hit the plate, mounts cracked, holes too tight                                                                                                                      |
 | v0.5    | Printed camera mast                                                                                                        | Replaced a bought carbon tube                                                                                                                                                                   |
 | v0.4    | Rear drive as a separate module                                                                                            | Cheap gear iterations                                                                                                                                                                           |
 | v0.3    | Floating knuckle supports and deck posts joined to the plate                                                               | Added an automatic check that every printed part is one solid                                                                                                                                   |
 | v0.2    | Three-deck layout, 100 mm wheelbase, 149 mm long                                                                           | v0.1 was too long                                                                                                                                                                               |
 | v0.1    | First concept, 130 mm wheelbase, 204 mm long                                                                               | —                                                                                                                                                                                              |
 
-&#32;STL files in the team's GitHub repository.
+[](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS)
 
 ### 8.4 CAD model as built (v1.0)
 
@@ -390,9 +392,9 @@ The chassis we are finally statisfed with passes all automatic checks: every pri
 
 **Parking condition.** The parking lot is 1.5 × the vehicle length L measured below 10 cm. For the camera axis to sit at the centre of the lot, its distance d to each end of the vehicle must satisfy:
 
-```latex
+$$
 d \le 0.75\,L - c
-```
+$$
 
 where c is the clearance to the parking wall. The old straight mast, 122 mm from the rear end, missed this by about 13 mm with L = 149 mm, which is why the L-mast moves the camera to the middle of the length. With the Ø 62.4 mm wheels L has grown, so the condition must be re-checked with the measured length.
 
