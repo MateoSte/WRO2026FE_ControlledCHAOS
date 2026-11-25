@@ -121,8 +121,6 @@ The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduc
 
 One 3S Li-ion pack feeds three separated rails: the battery rail for the drive motor, a 5 V servo rail and a 5 V logic rail, so a servo current spike cannot reset the controller.
 
-&#91;embedded content: power distribution · battery to every load\]
-
 Everything after the switch hangs off the +BAT rail; all grounds meet at one star point on the perfboard.
 
 ### 4.1 Battery
