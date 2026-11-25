@@ -121,7 +121,7 @@ The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduc
 
 One 3S Li-ion pack feeds three separated rails: the battery rail for the drive motor, a 5 V servo rail and a 5 V logic rail, so a servo current spike cannot reset the controller.
 
-![Power supply image](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/powerSupply_4.png)
+![Power supply image](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/powerSupply_4.png?raw=true)
 
 Everything after the switch hangs off the +BAT rail; all grounds meet at one star point on the perfboard.
 
@@ -215,7 +215,7 @@ The position itself was moved around as we did the design process so we had few 
 
 The ESP32-S3 drives the motor and both servos directly and reads every sensor and the camera over one I²C bus split by the multiplexer; t. The as-built wire list in the connection list (added as a file to this repository).
 
-![Electronics and wiring](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/Electronics_and_wiring_6.png)
+![Electronics and wiring](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Electronics_and_wiring_6.png?raw=true)
 
 Actuators are driven by direct PWM and GPIO lines; every sensor and the camera sit on one I²C bus behind the multiplexer.
 
@@ -321,7 +321,7 @@ where δ₀ = 73° is straight ahead and s = +1 for the right wall, −1 for the
 | `STOP_AT_CORNERS`                         | true             | Brief stop before each corner                      |
 | `TOF_SPACING_R_MM` / `_L_MM`            | 120              | Front-to-rear side sensor spacing (to be measured) |
 
-![Open challenge](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/imgs/Open_Challenge_7_4.png)
+![Open challenge](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Open_Challenge_7_4.png?raw=true)
 
 The direction is decided once, at the first wall; every lap after that repeats the same turn-and-follow pair.
 
@@ -370,9 +370,15 @@ All structural parts are our own 3D-printed designs, made on the team's Bambu La
 | v0.2    | Three-deck layout, 100 mm wheelbase, 149 mm long                                                                           | v0.1 was too long                                                                                                                                                                               |
 | v0.1    | First concept, 130 mm wheelbase, 204 mm long                                                                               | —                                                                                                                                                                                              |
 
-[](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS)
+[STL files](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/tree/main/Car_model/1_STL)
 
 ### 8.4 CAD model as built (v1.0)
+
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_final.png?raw=true)
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_front.png?raw=true)
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_left.png?raw=true)
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_rear.png?raw=true)
+![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_right.png?raw=true)
 
 The chassis we are finally statisfed with passes all automatic checks: every printed part is one solid, the tie-rod screws clear the plate over the full steering travel, and the camera head turns a full circle without collisions. The model was drawn with LEGO 43.2 × 22 mm wheels; the vehicle now runs on Ø 62.4 mm wheels on the same axles, with the mast shortened to keep the height at 290 mm.
 
