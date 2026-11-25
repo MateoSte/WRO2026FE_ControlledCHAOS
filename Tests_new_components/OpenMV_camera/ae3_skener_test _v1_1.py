@@ -31,9 +31,9 @@ except ImportError:
 
 # ============================ 1. SETTINGS ====================================
 
-NACIN = "PROVJERA"                           # "LIVE", "PROVJERA", "KALIBRACIJA" or "SKEN"
+NACIN = "LIVE"                           # "LIVE", "PROVJERA", "KALIBRACIJA" or "SKEN"
 SMJER = "CCW"                                 # "CCW" or "CW" (LIVE, PROVJERA, KALIBRACIJA)
-KUT = 0                                      # angle index 0, 1, 2 (LIVE, KALIBRACIJA)
+KUT = 1                                      # angle index 0, 1, 2 (LIVE, KALIBRACIJA)
 
 KUTOVI = [35, 80, 125]                       # tower angles in degrees (CCW = left, CW = right)
 
@@ -65,57 +65,58 @@ BROJ_LINIJA = 12
 
 # --- ROIs: (line, x, y, w, h), line 0-11 in that direction's numbering ---
 # A line may have several rectangles (inner + outer seat); the one with more colour pixels wins.
-ROI = {
-    "CCW": {
+#25112026
+ROI = {                                      # rječnik: smjer -> {indeks kuta -> popis ROI-ja}
+    "CCW": {                                 # CCW: brojevi linija u CCW numeraciji
         0: [
+            (3, 64,335, 135, 90),
+            (3, 242, 245, 157,144)
+        ],                                   # kraj kuta 0
+        1: [
+            (2,641, 412, 174,257),
+            (4, 777, 242, 128,41),
+            (4, 939, 176,86,71),
+            (5, 703, 152,78, 79),
+            (5, 800, 150, 112, 41),
+            (6, 470,141, 68,47),
+            (7, 219,150,71,39)
 
+        ],                                   # kraj kuta 1
+        2: [
+            (8, 866, 103, 90, 39),
+            (9, 541, 120, 144,69),
+            (10, 371, 142,144, 79),
+            (11, 90, 178, 223, 69),
+            (0, 58, 274, 150, 133),
+            (1, 498, 324,165, 232)
 
-        ],                                   # end of angle 0
-        1: [                                 # angle 1 (80 deg left)
-            (2, 644, 427, 126,219),
-            (3, 987, 285, 107,95),
-            (3,1171, 232, 97,129),
-            (4, 974, 170, 71, 68),
-            (4, 834, 238, 161, 49),
-            (5, 856, 156, 56, 28),
-            (5, 751, 159, 51, 68),
-            (6, 478, 152, 45, 37),
-            (7, 234, 165,45, 32)
-        ],                                   # end of angle 1
-        2: [                                 # angle 2 (125 deg left)
-            (8, 888, 109,64,28),
-            (9, 547, 135, 122, 39),
-            (10, 375, 165, 133, 49),
-            (11, 122, 199,161,78),
-            (0, 86, 298, 109,109),
-            (1, 536, 350, 122, 171)
-
-        ],                                   # end of angle 2
-    },                                       # end of CCW
+        ],                                   # kraj kuta 2
+    },                                       # kraj CCW
     "CW": {
-        0: [                                 # angle 0 (35 deg right)
-            (1, 450,472, 596, 271),
-            (2, 182, 301, 339, 155),
-            (3, 486,226, 154, 71),
-            (4, 727, 196,134,44),
-            (5, 919, 171,119, 44)
-        ],                                   # end of angle 0
-        1: [                                 # angle 1 (80 deg right)
-            (6,338,180,81,29),
-            (7, 574, 167, 55, 33),
-            (8, 815, 154, 48, 35)
-        ],                                   # end of angle 1
-        2: [                                 # angle 2 (125 deg right)
-            (9, 204, 196, 170, 28),
-            (9, 200, 233, 62, 48),
-            (10, 307, 272, 86, 52),
-            (10, 446, 217, 53, 66),
-            (11, 501, 283, 80, 99),
-            (11, 655, 230, 81, 113),
-            (0, 185, 510, 180,215 )
+        0: [
+            (1, 841, 335, 186, 227),
+            (2, 230, 287, 341, 157),
+            (3, 493, 182, 172, 82),
+            (4, 731, 150, 165 ,92),
+            (5, 911, 129 , 174, 68)
+        ],                                   # kraj kuta 0
+        1: [
+            (6, 397, 129, 111, 47),
+            (7, 622, 127, 96, 32),
+            (8, 851, 112, 101, 43),
+            (0, 972,446,272, 260)
+        ],                                   # kraj kuta 1
+        2: [
+            (9, 259, 135, 92, 90),
+            (9, 363, 135, 92, 28),
+            (10, 365, 195, 96, 77),
+            (10, 495, 152, 67, 71),
+            (11, 547, 238, 112, 109),
+            (11, 708, 174, 109, 143)
 
-        ],                                   # end of angle 2
-    },                                       # end of CW
+
+        ],                                   # kraj kuta 2
+    },                                       # kraj CW
 }
 
 # Expected layout for SKEN: 12 chars R/G/- in CCW numbering (spaces allowed), None = no check
