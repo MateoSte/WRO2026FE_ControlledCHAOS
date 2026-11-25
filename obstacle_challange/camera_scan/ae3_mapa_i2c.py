@@ -41,10 +41,14 @@
 #
 # NUMERACIJA LINIJA - ista kao u testnoj skripti v6
 #   linija = 3 * sekcija + L, u smjeru vožnje koji je ESP32 poslao.
-#   PRAVILO TROJKI: u svakoj trojci (0-2, 3-5, 6-8, 9-11) je ILI jedan stup
-#   na srednjoj liniji ("-R-") ILI dva stupa na vanjskim linijama ("R-G").
-#   Ako kamera vidi nešto treće (npr. "RG-"), skripta izabere objašnjenje koje
-#   traži najmanje "grešaka" kamere, a boju koju nije vidjela označi s '?'.
+#   TRIPLET RULE (WRO 2026 rules, Figure 8c - the 36 sign cards): every
+#   straight section (lines 0-2, 3-5, 6-8, 9-11) holds EITHER exactly one
+#   pillar on any of its three lines ("R--", "-R-", "--R") OR two pillars on
+#   the two outer lines ("R-G"). A section is never empty, and a middle pillar
+#   never shares the section with another pillar.
+#   If the camera reports anything else (e.g. "RG-"), the script picks the
+#   allowed layout that needs the fewest camera errors and marks a colour it
+#   did not see with '?'.
 # =============================================================================
 
 import csi                                   # kamera (senzor slike) na AE3
@@ -77,7 +81,8 @@ BROJ_LINIJA = 12                             # 4 sekcije x 3 poprečne linije
 PRIKAZ_DOK_CEKA = True                       # True = dok čeka ESP32, šalje živu sliku u IDE (ne smeta I2C-u)
 
 # --- ROI-ji: redak (linija, x, y, w, h); linija 0-11 u numeraciji TOG smjera ---
-# Kopija iz ae3_skener_test_v1_0 (verzija 6), 24. 11. 2026.
+# ROIs re-calibrated on 25 Nov 2026 after the camera was tilted 2 deg further down
+# (values from the calibration script ae3_skener_test, KALIBRACIJA / PROVJERA modes).
 ROI = {                                      # rječnik: smjer -> {indeks kuta -> popis ROI-ja}
     "CCW": {                                 # CCW: brojevi linija u CCW numeraciji
         0: [
@@ -85,7 +90,7 @@ ROI = {                                      # rječnik: smjer -> {indeks kuta -
             (3, 242, 245, 157,144)
         ],                                   # kraj kuta 0
         1: [                                
-            (2,641, 412, 174,257)
+            (2,641, 412, 174,257),               # comma added: without it Python tries to call the tuple and the script stops
             (4, 787,225, 112,49),
             (4, 939, 176,86,71),
             (5, 703, 152,78, 79),
@@ -321,15 +326,25 @@ def slozi_mapu(smjer, ocitanja):             # očitanja svih kutova -> mapa 12 
     return mapa, odluka
 
 
-# ------------------------- PRAVILO TROJKI ------------------------------------
-# U trojci (L0, L1, L2) moguće su samo dvije "slike": SREDINA (stup samo na L1)
-# ili VANJSKE (stupovi na L0 i L2). Za svaku sliku zbrojimo koliko se slaže s
-# kamerom: viđen stup gdje ga slika traži = +1, prazno gdje ga traži = -1,
-# viđen stup gdje ga slika NE traži = -1, prazno gdje ga ne traži = +0.5.
-# Linija bez ROI-ja ('?') ne broji. Pobjeđuje slika s više bodova; boju stupa
-# koji slika traži, a kamera ga nije vidjela, označimo s '?'.
+# ------------------------- TRIPLET RULE ------------------------------------
+# The allowed layouts of one section, written as the set of occupied lines
+# (L0, L1, L2). Source: WRO 2026 Future Engineers rules, Figure 8c. Cards
+# 1-12 hold one pillar (on the first, middle or last line), cards 13-36 hold
+# two pillars, always on the first and the last line. So a section can never
+# be empty, never has three pillars, and a middle pillar is always alone.
+HIPOTEZE = ((1,), (0,), (2,), (0, 2))        # hypotheses: middle only, first only, last only, both outer
 
-def dokaz(linija, mapa, ocitanja):           # što je kamera vidjela na liniji: None, ('-', 0) ili (boja, piksela)
+# Scoring of one hypothesis against what the camera saw, line by line:
+#   pillar seen where the hypothesis expects one        +1 (+ tiny size bonus)
+#   nothing seen where the hypothesis expects a pillar  -1
+#   pillar seen where the hypothesis expects nothing    -1
+#   nothing seen where the hypothesis expects nothing   +0.5
+#   line without any ROI ('?')                           0 (no evidence)
+# The hypothesis with the most points wins. If several hypotheses share the
+# best score (typically when the camera saw nothing at all), a line keeps a
+# definite value only if all of them agree on it; otherwise it becomes '?'.
+
+def dokaz(linija, mapa, ocitanja):           # evidence for one line: None (no ROI), ('-', 0) or (colour, pixels)
     if mapa[linija] == "?":
         return None
     if mapa[linija] == "-":
@@ -337,14 +352,14 @@ def dokaz(linija, mapa, ocitanja):           # što je kamera vidjela na liniji:
     return (mapa[linija], max(m[1] for (i, m) in ocitanja[linija] if m[0] == mapa[linija]))
 
 
-def bodovi(dokazi, zauzete):                 # koliko se "slika" (zauzete linije) slaže s dokazima
+def bodovi(dokazi, zauzete):                 # score of one hypothesis (zauzete = occupied lines)
     b = 0.0
     for L in range(3):
         d = dokazi[L]
         if d is None:
             continue
         ima = d[0] != "-"
-        jacina = 1.0 + min(d[1], 1000) / 10000.0   # veća mrlja = malo jači dokaz (samo za neriješeno)
+        jacina = 1.0 + min(d[1], 1000) / 10000.0   # bigger blob = slightly stronger evidence (only breaks ties)
         if L in zauzete:
             b += jacina if ima else -1.0
         else:
@@ -352,30 +367,33 @@ def bodovi(dokazi, zauzete):                 # koliko se "slika" (zauzete linije
     return b
 
 
-def popravi_trojke(mapa, ocitanja):          # vraća (nova mapa, popis napomena)
+def popravi_trojke(mapa, ocitanja):          # apply the triplet rule; returns (corrected map, list of notes)
     nova = list(mapa)
     napomene = []
     for s in range(BROJ_LINIJA // 3):
         lin = (3 * s, 3 * s + 1, 3 * s + 2)
         dokazi = [dokaz(l, mapa, ocitanja) for l in lin]
-        if all(d is None for d in dokazi):   # nijedna linija trojke nema ROI
+        if all(d is None for d in dokazi):   # no ROI for any line of this section
             for l in lin:
                 nova[l] = "?"
-            napomene.append("S%d: nema ROI-ja ni za jednu liniju" % s)
+            napomene.append("S%d: no ROI for any line" % s)
             continue
-        b_sred = bodovi(dokazi, (1,))
-        b_vanj = bodovi(dokazi, (0, 2))
-        zauzete = (1,) if b_sred >= b_vanj else (0, 2)
+        ocjene = [(bodovi(dokazi, h), h) for h in HIPOTEZE]
+        najbolja = max(o for (o, h) in ocjene)
+        pobjednici = [h for (o, h) in ocjene if o > najbolja - 1e-6]   # all hypotheses with the best score
         for L in range(3):
-            if L in zauzete:
-                d = dokazi[L]
+            d = dokazi[L]
+            if all(L in h for h in pobjednici):            # every winner expects a pillar here
                 nova[lin[L]] = d[0] if (d is not None and d[0] != "-") else "?"
-            else:
+            elif all(L not in h for h in pobjednici):      # every winner expects this line empty
                 nova[lin[L]] = "-"
+            else:                                          # winners disagree -> unknown
+                nova[lin[L]] = "?"
         staro = "".join(mapa[l] for l in lin)
         novo = "".join(nova[l] for l in lin)
         if staro != novo:
-            napomene.append("S%d: kamera %s -> pravilo %s (sredina %.1f, vanjske %.1f)" % (s, staro, novo, b_sred, b_vanj))
+            opis = " ".join("%s=%.1f" % ("".join("X" if L in h else "-" for L in range(3)), o) for (o, h) in ocjene)
+            napomene.append("S%d: camera %s -> rule %s (%s)" % (s, staro, novo, opis))
     return nova, napomene
 
 
@@ -394,7 +412,7 @@ def ispisi_rezultat(smjer, mapa, odluka, nova, napomene):   # ispis u Serial Ter
             kut, m = odluka[k]
             print("linija %2d (%s): %s  px=%d visina=%d sigurnost=%.2f (kut %d)" % (k, opis_linije(k), m[0], m[1], m[3], m[4], kut))
     for n in napomene:
-        print("PRAVILO TROJKI  " + n)
+        print("TRIPLET RULE  " + n)
     print("SIROVA  %s   (%s)" % ("".join(mapa), grupiraj(mapa)))
     print("MAPA    %s   (%s)" % ("".join(nova), grupiraj(nova)))
 
