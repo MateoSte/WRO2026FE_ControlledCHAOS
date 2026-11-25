@@ -325,6 +325,291 @@ where δ₀ = 73° is straight ahead and s = +1 for the right wall, −1 for the
 
 The direction is decided once, at the first wall; every lap after that repeats the same turn-and-follow pair.
 
+### 7.5 Obstacle Challenge – Software Explanation
+
+#### 7.5.1 Overview: scan, plan, drive
+
+Our Obstacle Challenge solution looks at the whole course once, before the robot moves, and then drives a pre-computed route without using the camera. The run has three phases:
+
+1. **Scan.** The robot stands in the parking lot. It finds the driving direction from its side ToF sensors, turns the camera tower to three angles and builds a map of all 12 possible pillar lines.
+2. **Plan.** From the map, the ESP32-S3 computes which lane (inner or outer) the robot must use in every section of all three laps, and where it must change lanes.
+3. **Drive.** The robot follows the plan with wall-following on the side ToF sensors, gyro headings and encoder odometry. The camera is not used while driving.
+
+The traffic rule is simple: a red pillar is passed on its right, a green pillar on its left. In the counter-clockwise (CCW) direction the inner wall is on the left, so red means the outer lane and green the inner lane. In the clockwise (CW) direction it is the other way round.
+
+**Why we chose this approach**
+
+- The camera measures only while the robot stands still. There is no motion blur, and white balance stays locked for the whole scan.
+- Knowing the full layout lets us place lane changes where the rules guarantee free space (see section 5), instead of reacting at the last moment.
+- The driving loop has no computer vision in it, so it stays short and fast, and the I2C bus is free for the ToF sensors.
+- We moved the camera mast to the middle of the vehicle length (chassis v0.12). With the robot centred in the parking lot, the camera sits at the same point in both orientations, so one set of calibrated views works for both directions.
+
+The trade-off: a pillar that is misread during the scan stays wrong for the whole run. We reduce this risk with the triplet rule (section 5) and by marking uncertain colours as unknown instead of guessing.
+
+#### 7.5.2 Software architecture
+
+The solution runs on two processors. The camera runs one program; the ESP32-S3 runs one sketch plus a planner header. They talk only over I2C.
+
+![Camera logic](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Camera_logic.png?raw=true)
+
+The camera runs only during the scan. Afterwards the ESP32-S3 drives with its own sensors, and the tower stays pointed straight ahead.
+
+| File | Runs on | Role |
+| --- | --- | --- |
+| `obstacle_challange/camera_scan/ae3_mapa_i2c.py` | OpenMV AE3 (saved as `main.py`) | ROI measurement, triplet rule, I2C target |
+| `obstacle_challange/obstacle_run/obstacle_run.ino` | ESP32-S3 | direction, scan control, start sequence, driving |
+| `obstacle_challange/obstacle_run/obstacle_plan.h` | ESP32-S3 and PC | map → lane plan, manoeuvre geometry |
+| `obstacle_challange/plan_sim/plan_sim.cpp` | PC | checks the plan for all 1296 layouts |
+| `includes/includes.ino`, `includes/ChaosCheck.h` | ESP32-S3 | pins, I2C addresses, calibration constants; I2C self-check at start-up |
+| `Tests_new_components/OpenMV_camera/ae3_skener_test` | OpenMV AE3 | calibration of ROIs and colour thresholds |
+
+The ESP32 sketch follows our team rule: pins, addresses and multiplexer channels live only in `includes.ino`, and every sketch includes that file instead of redefining them.
+
+#### 7.5.3 Pillar detection on the camera
+
+The camera answers one question per line: is there a pillar here, and is it red or green? It does not search the whole image. The answer comes from fixed regions of interest (ROIs) and a pixel vote. All code is in `obstacle_challange/camera_scan/ae3_mapa_i2c.py`. Function names are Croatian; the English meaning is given in brackets.
+
+**Image settings.** `init_kamera()` (init camera) sets 1280 × 800 RGB565, the resolution in which the ROIs were measured. `zakljucaj()` (lock) locks white balance after start-up so colours do not drift between the three views. Exposure can be locked with `ZAKLJUCAJ_EKSPOZICIJU`.
+
+**ROIs.** The dictionary `ROI[direction][angle]` holds rows `(line, x, y, w, h)`: a rectangle in pixels and the line number it belongs to. A line may have several rectangles, for example the inner and the outer seat, or the same line seen from two tower angles. We create the rectangles with our calibration script `ae3_skener_test`:
+
+- `KALIBRACIJA` (calibration) mode prints a ready-made ROI row for every blob it finds, with a 12 px margin.
+- `PROVJERA` (check) mode shows all ROIs on the live image so we can confirm them.
+
+**Colour vote.** `mjeri_roi()` (measure ROI) runs `find_blobs()` inside one rectangle with three LAB thresholds: red, green and magenta (`PRAG_CRVENA`, `PRAG_ZELENA`, `PRAG_MAGENTA`). Blobs under 15 pixels (`MIN_PIKSELA`) are noise.
+
+- The colour with more pixels in total wins. We sum the pixels of all blobs, not only the largest one, because a far pillar is often split into several small blobs.
+- Magenta is counted separately. It is the parking lot wall and never counts as a pillar.
+- The result also carries a confidence value: winner pixels divided by all red and green pixels.
+
+**From views to a map.** `izmjeri_kut()` (measure angle) measures every ROI of one view and draws the result on the image for the OpenMV IDE frame buffer. `slozi_mapu()` (compose map) merges the three views. For each line it keeps the reading with the most coloured pixels. If one line sees red in one rectangle and green in another, it prints a warning, because that usually means a rectangle also catches the neighbouring line.
+
+**Why fixed ROIs.** The rules fix where pillars can stand, and the camera does not move during a view. So we never have to recognise a pillar from its shape. Far pillars are only about 45 × 30 px, too small for reliable shape checks. Fixed ROIs also make walls, the parking lot and objects outside the field irrelevant.
+
+#### 7.5.4 ESP32 ↔ camera handshake
+
+The ESP32-S3 controls the scan, and the camera only answers. Each tower move waits for the camera's "done" before the next one starts. The camera is an I2C target at address `0x12` on channel 5 of the TCA9548A multiplexer, the same bus as all other sensors. MicroPython's `machine.I2CTarget` in memory mode gives the camera a 64-byte register file. The ESP32 writes a register address and then reads or writes bytes, as with any I2C sensor.
+
+| Register | Written by | Meaning |
+| --- | --- | --- |
+| 0 | camera | MAGIC = `0xC5` (script is running) |
+| 1 | camera | protocol version = 1 |
+| 2 | camera | STATUS: 0 waiting, 1 busy, 2 view done, 3 map done, 4 error |
+| 3 | camera | ACK = sequence number of the last finished command (written last) |
+| 4 | camera | number of ROIs measured in the last view |
+| 5 | camera | flags: bit 0 = triplet rule changed the map, bit 1 = map contains `?` |
+| 16 | ESP32 | direction: `'C'` = CCW, `'W'` = CW |
+| 17 | ESP32 | view index 0, 1, 2 |
+| 18 | ESP32 | command: 1 = capture view, 2 = reset scan, 3 = compose map now |
+| 19 | ESP32 | SEQ: command counter 1–255 (written last, in the same message) |
+| 32–43 | camera | raw map: 12 characters `R` / `G` / `-` / `?` |
+| 48–59 | camera | map after the triplet rule (used by the robot) |
+
+One scan, as coded in `scanCourse()` in `obstacle_run.ino`:
+
+1. `camHello()` waits up to 15 s for MAGIC and reads the last ACK, so a restarted ESP32 never reuses an old sequence number.
+2. `camCommand(0, CCMD_RESET)` clears old readings.
+3. For each view k: `towerMoveTo()` turns the tower (CCW 170° / 215° / 260°, CW 100° / 55° / 10°; 135° = straight ahead) and waits until it stops. Then `camCommand(k, CCMD_SNAP)` writes direction, view, command and SEQ in one message and polls until ACK equals SEQ.
+4. After the last view the camera reports STATUS 3. The ESP32 reads both maps and turns the tower back to 135°.
+
+**Why the order of writes matters.** The ESP32 writes SEQ as the last byte of its message, so the camera never acts on a half-written command. The camera writes the maps first, then STATUS, then ACK. Once the ESP32 sees its own SEQ in ACK, the maps are already complete. A command that fails on the camera still gets an ACK with STATUS 4, so the robot never waits forever. In addition, every wait on the ESP32 side has a timeout (15 s for the first contact, 8 s per view).
+
+#### 7.5.5 Line numbering and the triplet rule
+
+The map is a string of 12 characters, one per radial line, always numbered in the robot's own driving order. Each straight section has three radial lines where pillars can stand: L0 at the start of the section, L1 in the middle (500 mm later) and L2 at the end (1000 mm).
+
+$$
+\text{line} = 3 \cdot \text{section} + L, \qquad \text{section } 0 = \text{start section (with the parking lot)}, \quad L \in \{0, 1, 2\}
+$$
+
+In a printout, `-G- -R- R-G -G-` means: section 0 has a green pillar on its middle line, section 2 a red pillar on L0 and a green one on L2, and so on. Because CW drives through the sections and lines in the opposite order, the same physical line has different numbers in the two directions:
+
+$$
+\text{CW line } (S, L) \;\leftrightarrow\; \text{CCW line } 3 \cdot ((4 - S) \bmod 4) + (2 - L)
+$$
+
+**The triplet rule.** In each section there is either one pillar on the middle line (`-X-`) or two pillars on the outer lines (`X-Y`). No other combination occurs. The camera script uses this rule to correct impossible readings in `popravi_trojke()` (correct triplets). For each section it scores two hypotheses, MIDDLE and OUTER, against what the camera saw:
+
+| Camera saw on a line | Hypothesis expects a pillar | Hypothesis expects empty |
+| --- | --- | --- |
+| a pillar | +1 (plus a tiny bonus for size) | −1 |
+| empty | −1 | +0.5 |
+| no ROI for this line | 0 | 0 |
+
+The hypothesis with more points wins. Its pillars take the colours the camera saw. A pillar that the winning hypothesis requires but the camera did not see gets `?`. Examples from our tests:
+
+| Raw (camera) | Corrected | Reason |
+| --- | --- | --- |
+| `RG-` | `-G-` | one wrong detection is more likely than one wrong detection plus one miss |
+| `R--` | `R-?` | the second outer pillar must exist; its colour is unknown |
+| `RGR` | `R-R` | two detections outvote one |
+| `---` | `-?-` | one missed pillar is more likely than two |
+
+The ESP32 prints both strings, so during testing we see exactly what the camera saw and what the rule changed:
+
+```
+linija:           012345678901
+kamera (sirovo):  -GR-R-R-G-G-
+mapa (pravila):   -G--R-R-G-G-
+po sekcijama:     -G- -R- R-G -G-
+```
+
+#### 7.5.6 Route planning
+
+The planner turns the 12-character map into a lane for every part of the three laps. It lives in `obstacle_challange/obstacle_run/obstacle_plan.h` as plain C++ with no Arduino calls, so the same file also compiles on a PC for the simulator (section 9). `route::build()` creates the plan.
+
+**Lanes.** The robot uses only two lanes and ignores the middle of the corridor:
+
+- **IN**: 150 mm from the inner wall (`LANE_WALL_MM`).
+- **OUT**: 150 mm from the outer wall. In the start section it is 300 mm (`PARK_LANE_WALL_MM`), because the magenta parking walls stick out 200 mm from the outer wall.
+
+**Colour → lane** (`route::laneFor()`). Whether the pillar stands on the inner or the outer seat does not matter. In both cases the chosen lane passes it on the correct side.
+
+| Direction | Red pillar (pass on its right) | Green pillar (pass on its left) |
+| --- | --- | --- |
+| CCW (inner wall on the left) | OUT | IN |
+| CW (inner wall on the right) | IN | OUT |
+
+**Visits.** Three laps are 13 section visits: the rest of section 0 after the parking lot, then S1, S2, S3, S0, …, S3, and finally S0 again up to the start position. For each visit the planner stores an entry lane and an exit lane:
+
+- The first pillar of the visit sets the entry lane, and the last one sets the exit lane.
+- If they differ (an `X-Y` section whose colours need different lanes), the robot changes lanes around the middle line L1. The triplet rule guarantees that L1 is empty in such a section.
+- A visit with no pillar of known colour takes the lane of the next visit, so the robot makes no extra moves. If nothing at all is known, the default is IN.
+- Lane changes between sections happen inside the corner turn (section 7), so they cost no extra manoeuvre.
+
+**Start and finish.** The parking lot always lies in section 0 next to the line we number L2 in CCW. So in CCW the robot starts after L0 and L1, while in CW (driving the other way) that same end of the section is L0 and both L1 and L2 are still ahead. Three constants in `obstacle_run.ino` describe this:
+
+| Constant | CCW | CW | Meaning |
+| --- | --- | --- | --- |
+| `START_FIRST_LINE` | 2 | 1 | first line of section 0 that is in front of the robot at the start |
+| `FINISH_LAST_LINE` | 1 | 0 | last line of section 0 before the stop point after three laps |
+| `START_BLOCK_LINE` | – | 0 | a pillar on this line is behind the robot but in the way of driving straight to IN; if present, start in OUT and change lanes at L1 |
+
+The plan is printed after the map. `>` marks the start visit, `|` the final one, `*` a lane taken from the next visit, and `!` a forced OUT start:
+
+```
+PLAN: S0> OUT->IN! | S1 OUT | S2 IN->OUT | S3 IN | S0 OUT->IN | S1 OUT | ...
+```
+
+#### 7.5.7 Driving: odometry, lanes, corners and lane changes
+
+Every movement in `obstacle_run.ino` uses four building blocks. Each one stops on a measured condition (distance, front ToF or heading), not on time.
+
+**Odometry in the section frame.** `tick()` runs in every control loop. It reads the gyro and the encoder and updates two numbers: x, the position along the section measured from line L0, and w, the distance of the robot centre from the inner wall. Here ψ is the heading relative to the section and d = +1 for CCW, −1 for CW:
+
+$$
+x \mathrel{+}= \Delta s \cos\psi, \qquad w \mathrel{-}= d \cdot \Delta s \sin\psi
+$$
+
+When the side ToF sensors see the lane's wall, w is pulled 20 % towards the measured value. After each corner the frame moves to the next section. The old inner wall line becomes the new L0, and the old front wall becomes the new outer wall:
+
+$$
+(x, w) \leftarrow (-w,\; x - 1000)
+$$
+
+**Wall-following** (`followLane()`). This is the same proportional law as in our Open Challenge program. Two side sensors give the distance and the angle to the wall:
+
+$$
+\alpha = \operatorname{atan2}(d_F - d_R,\ \text{spacing}), \qquad \text{correction} = \text{side} \cdot \big(K_{dist}(\text{dist} - \text{target}) + K_{angle}\,\alpha\big)
+$$
+
+Readings above 700 mm (no wall) or more than 120 mm closer than the target (a parking wall or a pillar) are rejected. The robot then holds the section heading with the gyro. A front reading under 150 mm stops the robot immediately.
+
+**Turns** (`turnToHeading()`). Turns use full steering lock until the gyro is 6° from an absolute target heading (start heading + d · 90° per corner). Because targets are absolute, small errors do not add up over three laps.
+
+**Turn geometry.** In a 90° turn the centre of the robot moves forward by F and sideways by S. With rear-axle radius R and the centre a = 53 mm in front of the rear axle, F = R − a and S = R + a. The formulas below use the lane position c, the distance of the robot centre from the wall the lane is attached to, and the corridor width of 1000 mm.
+
+- **Corner.** The turn into the next section starts when the front ToF reads `cornerFront`. The robot ends the turn in the lane the next section needs, so lane changes between sections cost nothing extra. The trigger is only armed after x ≥ 700 mm.
+- **Lane change** (`switchLane()`). The robot turns 90° towards the new lane, drives across (`driveAcross()`) until the front ToF reads `acrossFront`, then turns back. The manoeuvre is centred on line L1, which is free by the triplet rule. It therefore starts at `switchStartX`.
+
+$$
+\text{cornerFront} = 1000 - w_{next} + F - f, \qquad \text{acrossFront} = c_{new} + F - f, \qquad \text{switchStartX} = 500 - \tfrac{F + S}{2}
+$$
+
+Here f is the distance from the front ToF to the robot centre (80 mm). For our current estimate R = 200 mm (F = 147 mm, S = 253 mm) this gives:
+
+| Trigger | Value (mm) |
+| --- | --- |
+| corner into IN | 847 |
+| corner into OUT | 287 |
+| corner into OUT of section 0 | 437 |
+| across to IN or OUT | 287 |
+| across to OUT of section 0 | 437 |
+| lane change starts at x | 300 |
+
+**Safety.** Every loop has a timeout (10 s on a straight, 5 s in a turn). The robot also stops if the MPU-6050 stops answering five times in a row.
+
+#### 7.5.8 Start sequence and parking exit
+
+After the start button, `runObstacle()` runs these steps:
+
+1. **Gyro calibration.** `gyroCalibrate()` averages 500 samples while the robot stands still.
+2. **Direction.** `decideDirection()` averages the two side ToF pairs. If the right wall is closer, the course is CCW; otherwise it is CW. In the parking lot the robot side is about 30 mm from the wall, which is below the VL53L1X minimum range. The sensor then reports `MinRangeClipped` or `MinRangeFail` instead of a distance. `nearAwareMm()` counts that as 0 mm (near), not as "no target"; otherwise the robot would choose the wrong direction.
+3. **Scan and plan.** See sections 4 to 6. Map and plan are printed to the serial monitor.
+4. **Parking exit.** `exitParking()` replays the manoeuvre we tested in `tests/parking/parking.ino`: seven short zig-zag moves on full lock (20–30 mm, alternating backward and forward) and one 200 mm forward arc. The moves are stored in `EXIT_LEGS` as "towards the lane" or "away from the lane", so the same table mirrors itself for CCW and CW. The robot ends roughly perpendicular to its start heading, facing the inner wall.
+5. **Into the first lane.** `driveAcross()` holds the heading towards the inner wall and drives forward or backward until the front ToF reads `startFront` for the first lane of the plan. Then a 90° turn points the robot in the driving direction, already in that lane.
+6. **Three laps.** The robot goes through the 13 visits of the plan. In each one it changes lanes at L1 if needed and turns at the corner trigger. In the last visit it stops at the start position.
+
+Wi-Fi is switched off in `setup()` (`WiFi.mode(WIFI_OFF)`), and Bluetooth is never started, as rule 11 requires.
+
+**Test commands.** We built the program so that each stage can be tested on its own from the serial monitor:
+
+| Command | What it does |
+| --- | --- |
+| `k` | direction, scan, map and plan; the robot does not move |
+| `m -R--G-R-G--R` | enter a map by hand (12 characters) |
+| `r` | drive with the hand-entered map, without the camera |
+| `x` | parking exit only |
+| `q` | one 90° turn, to measure F and S and check the encoder sign |
+| `s` or START button | the full run |
+
+#### 7.5.9 Verification
+
+Before driving on the mat, we checked the logic on a PC. The simulator showed that the plan is collision-free for every possible layout, but only if the turn radius stays at or below about 200 mm.
+
+**Camera script on a PC.** We ran `ae3_mapa_i2c.py` with mocked `csi` and `I2CTarget` modules and replayed full scans through the register protocol. There are 14 cases: exact maps in both directions, all triplet corrections from section 5, and an invalid command that must return STATUS 4.
+
+**Planner unit tests.** We built `obstacle_plan.h` with g++ and checked the colour-to-lane table and the start and finish cases from section 6.
+
+**Plan simulator** (`obstacle_challange/plan_sim/plan_sim.cpp`). The simulator builds the plan with the same header as the robot, for all 6⁴ = 1296 pillar layouts (per section: `-R-` `-G-` `R-R` `R-G` `G-R` `G-G`) and both directions. It then drives the plan with ideal geometry: a 160 × 140 mm rectangle, rear-axle arcs of radius R and a proportional lane controller. Pillars outside section 0 are placed on both seats at once, which is stricter than reality. The simulator reports the smallest gap to pillars, walls and the parking walls:
+
+| R (mm) | CCW: layouts with contact | CW: layouts with contact | Smallest pillar gap without contact | Where contact happens |
+| --- | --- | --- | --- | --- |
+| 173 | 0 / 1296 | 0 / 1296 | 51 mm | – |
+| 200 | 0 / 1296 | 0 / 1296 | 15 mm (CCW), 54 mm (CW) | – |
+| 223 | 288 / 1296 | 0 / 1296 | – | CCW start, when section 1 needs IN |
+| 250 | 1224 / 1296 | 1080 / 1296 | – | CCW start; parking walls during the first turn |
+
+The CCW start is the tight case. The parking lot ends right before the corner, so a large radius carries the robot past the point where it should already turn into section 1. Measuring the real F and S (command `q`) is therefore our first task on the mat.
+
+In the ideal model, the parking exit manoeuvre touches a magenta wall for every radius. The real manoeuvre was developed on the robot in `tests/parking`. The model shows how small the margin is, so we check for contact with the magenta walls on every new mat.
+
+**First track test (24 Nov 2026).** Direction detection and the full handshake worked. The camera answered each view in about 1 s. Pillars close to the robot were detected correctly; far pillars in CCW were missed. The tower feedback read about 10° lower than the commanded angle, although the servo gets the same pulse as in our manual tests. Both issues are being investigated (section 10).
+
+#### 7.5.10 Tuning parameters and known limitations
+
+All values that depend on the physical robot are named constants at the top of `obstacle_run.ino` and `ae3_mapa_i2c.py`. Each one is measured, not guessed:
+
+| Constant | File | How we set it |
+| --- | --- | --- |
+| `TURN_FWD_MM`, `TURN_SIDE_MM` (F, S) | obstacle\_run.ino | command `q`: mark the robot centre, turn 90°, measure both shifts |
+| `ENC_SIGN` | obstacle\_run.ino | command `q` prints whether the encoder count rises when driving forward |
+| `SIDE_TO_CENTER_MM`, `FRONT_TO_CENTER_MM` | obstacle\_run.ino | ruler: ToF sensor face to robot centre |
+| `START_X_MM`, `START_W_MM` | obstacle\_run.ino | robot centre in the parking lot, measured on the mat |
+| `TOF_SPACING_R_MM`, `TOF_SPACING_L_MM` | obstacle\_run.ino | distance between the front and rear side sensors (shared with Open Challenge) |
+| `TOWER_MV_CENTER`, `TOWER_MV_PER_DEG` | includes.ino | feedback voltage at known tower angles |
+| `ROI`, `PRAG_*` | ae3\_mapa\_i2c.py | calibration script `ae3_skener_test` (KALIBRACIJA, PROVJERA) and the OpenMV Threshold Editor |
+
+**Known limitations**
+
+- **Parking at the end is not implemented yet.** After three laps the robot stops at its start position.
+- **The map is not re-checked while driving.** A pillar misread during the scan leads to a pass on the wrong side. The triplet rule and the `?` marking reduce this risk but do not remove it.
+- **The CCW start is tight for large turn radii** (section 9). If the measured R is above about 200 mm, the start sequence must change.
+- **Far pillars.** In the first track test, far pillars in CCW were missed. We are checking whether the ROIs are offset (tower angle, mast play) or the colours are off (white balance, lighting).
+- **Tower feedback** is calibrated only between 90° and 270°. Below 90° (CW views at 55° and 10°) the robot waits a fixed time instead of confirming the angle.
+- **`includes.ino` defines `TOWER_CENTER` twice** (135, then 81). Our obstacle code uses its own `TOWER_FWD_DEG = 135`; the duplicate still has to be removed.
+
+
 ## 8. Fabrication
 
 All structural parts are our own 3D-printed designs, made on the team's Bambu Lab X1 Carbon; only the wheels and the differential are LEGO. The chassis went through several  iterations, most of them driven by what failed on a real print like position of the camera's holder, adjusting of the wheel positions etc..
