@@ -510,7 +510,7 @@ $$
 **Wall-following** (`followLane()`). This is the same proportional law as in our Open Challenge program. Two side sensors give the distance and the angle to the wall:
 
 $$
-\alpha = \operatorname{atan2}(d_F - d_R,\ \text{spacing}), \qquad \text{correction} = \text{side} \cdot \big(K_{dist}(\text{dist} - \text{target}) + K_{angle}\,\alpha\big)
+\alpha = \mathrm{atan2}(d_F - d_R,\ \text{spacing}), \qquad \text{correction} = \text{side} \cdot \big(K_{dist}(\text{dist} - \text{target}) + K_{angle}\,\alpha\big)
 $$
 
 Readings above 700 mm (no wall) or more than 120 mm closer than the target (a parking wall or a pillar) are rejected. The robot then holds the section heading with the gyro. A front reading under 150 mm stops the robot immediately.
