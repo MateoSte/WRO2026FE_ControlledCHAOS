@@ -81,10 +81,7 @@ const float CORNER_ARM_X_MM = 700.0;   // zavoj se smije okinuti tek od ovog x
 const int   ACROSS_TOL_MM   = 15;      // preko staze: dovoljno blizu cilja
 const float TURN_EARLY_DEG  = 6.0;     // kao open_challenge
 const int   EMERGENCY_MM    = 150;     // zid ispred blize = HITNI STOP
-const int   ENC_SIGN        = 1;       // TODO: +1 if drive.rawAngle() grows while motor(+) drives forward (command 'q' prints it)
-=======
 const int   ENC_SIGN        = -1;       // TODO: +1 ako encCount RASTE u voznji naprijed (naredba 'q' ispisuje)
->>>>>>> fd244319ef4b411fe369266ea5849a08040e0a75
 const float TOF_SPACING_R_MM = 120.0;  // TODO kao u open_challenge
 const float TOF_SPACING_L_MM = 120.0;
 const unsigned long STRAIGHT_TIMEOUT_MS = 10000;
