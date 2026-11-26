@@ -33,7 +33,7 @@ except ImportError:
 
 NACIN = "LIVE"                           # "LIVE", "PROVJERA", "KALIBRACIJA" or "SKEN"
 SMJER = "CCW"                                 # "CCW" or "CW" (LIVE, PROVJERA, KALIBRACIJA)
-KUT = 1                                      # angle index 0, 1, 2 (LIVE, KALIBRACIJA)
+KUT = 2                                      # angle index 0, 1, 2 (LIVE, KALIBRACIJA)
 
 KUTOVI = [35, 80, 125]                       # tower angles in degrees (CCW = left, CW = right)
 
@@ -87,7 +87,7 @@ ROI = {                                      # rječnik: smjer -> {indeks kuta -
             (9, 541, 120, 144,69),
             (10, 371, 142,144, 79),
             (11, 90, 178, 223, 69),
-            (0, 58, 274, 150, 133),
+            (0, 89, 288, 74, 104),
             (1, 498, 324,165, 232)
 
         ],                                   # kraj kuta 2
