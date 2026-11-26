@@ -38,10 +38,10 @@
 route::Geo G;                         // vrijednosti se postavljaju u setup() iz konstanti ispod
 const float LANE_WALL_MM      = 150.0;  // traka: lice bocnog ToF-a -> zid
 const float PARK_LANE_WALL_MM = 300.0;  // traka OUT u startnoj sekciji (parking je dubok 200)
-const float SIDE_TO_CENTER_MM = 70.0;   // TODO izmjeriti: lice bocnog ToF-a -> sredina robota
-const float FRONT_TO_CENTER_MM= 80.0;   // TODO izmjeriti: lice prednjeg ToF-a -> sredina robota
-const float TURN_FWD_MM       = 147.0;  // TODO izmjeriti naredbom 'q' (teorija za R = 200: 200 - 53)
-const float TURN_SIDE_MM      = 253.0;  // TODO izmjeriti naredbom 'q' (teorija za R = 200: 200 + 53)
+const float SIDE_TO_CENTER_MM = 60.0;   //  izmjeriti: lice bocnog ToF-a -> sredina robota
+const float FRONT_TO_CENTER_MM= 75.0;   //  izmjeriti: lice prednjeg ToF-a -> sredina robota
+const float TURN_FWD_MM       = 210.0;  //  izmjeriti naredbom 'q' (teorija za R = 200: 200 - 53)
+const float TURN_SIDE_MM      = 280.0;  //  izmjeriti naredbom 'q' (teorija za R = 200: 200 + 53)
 
 // Polozaj sredine robota u parkingu (x od linije L0 startne sekcije u smjeru voznje,
 // w od unutarnjeg zida). Parking je uz liniju L2 kad je smjer CCW, uz L0 kad je CW.
@@ -81,7 +81,7 @@ const float CORNER_ARM_X_MM = 700.0;   // zavoj se smije okinuti tek od ovog x
 const int   ACROSS_TOL_MM   = 15;      // preko staze: dovoljno blizu cilja
 const float TURN_EARLY_DEG  = 6.0;     // kao open_challenge
 const int   EMERGENCY_MM    = 150;     // zid ispred blize = HITNI STOP
-const int   ENC_SIGN        = -1;       // TODO: +1 ako encCount RASTE u voznji naprijed (naredba 'q' ispisuje)
+const int   ENC_SIGN        = 1;       // TODO: +1 ako encCount RASTE u voznji naprijed (naredba 'q' ispisuje)
 const float TOF_SPACING_R_MM = 120.0;  // TODO kao u open_challenge
 const float TOF_SPACING_L_MM = 120.0;
 const unsigned long STRAIGHT_TIMEOUT_MS = 10000;
@@ -102,8 +102,11 @@ const bool  BEZ_MOTORA      = false;   // true = sve osim pogona (sken, plan, is
 // For the other direction every steering value changes sign; distances stay.
 const int EXIT_TESTED_DIR = -1;               // TODO: confirm in which direction the test was done
 struct ExitLeg { float steerDeg; float mm; };  // the calls from parking.ino setup(), in order
-const ExitLeg EXIT_LEGS[] = {{-17, 20}, {17, -20}, {-17, 20}, {17, -30},
-                             {-17, 20}, {17, -20}, {-17, 20}, {17, -200}};
+// const ExitLeg EXIT_LEGS[] = {{-17, 18}, {17, -18},{-17, 18}, {17, -18},
+//                              {-17, 18}, {17, -18},{-17, 18}, {17, -18}, 
+//                              {17, -200}};
+
+const ExitLeg EXIT_LEGS[] = {{0, -500}};
 
 // Settings copied unchanged from tests/parking/parking.ino
 const int   DRIVE_SPEED      = 100;           // drive.run(): 0..255
