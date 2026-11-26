@@ -115,7 +115,7 @@ The linkage was checked in CAD for a free sweep of ±35° without screw heads hi
 | Full left (limit)               | 55°        |
 | Full right (limit)              | 90°        |
 
-The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduced the maximum steering angle the vehicle had with the smaller wheels.&#32;
+The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduced the maximum steering angle the vehicle had with the smaller wheels.
 
 ## 4. Power
 
@@ -257,7 +257,7 @@ The SparkFun TB6612FNG replaced the DRV8871 of the earlier concept. It runs its 
 
 The illuminated rocker switch is the only power switch, and its lamp shows when the vehicle is powered. The red 16 mm START button is the only input at the start; its LED terminals are not connected, and the on-board RGB LED of the NULA board shows the vehicle's state if needed.
 
-## 7. Software architecture&#32;
+## 7. Software architecture
 
 ### 7.1 Toolchain
 
@@ -275,7 +275,7 @@ All pin numbers and constants live in one file, `includes/includes.ino` (formerl
 | ESP32-S3   | Start sequence, motor and encoder, steering, tower servo, ToF and IMU reading, decisions while driving |
 | OpenMV AE3 | Image capture and colour detection, answers the ESP32-S3 over I²C at 0x12                             |
 
-### 7.3 Modules&#32;
+### 7.3 Modules
 
 | Module      | Responsibility                                          |
 | ----------- | ------------------------------------------------------- |
@@ -510,7 +510,7 @@ $$
 **Wall-following** (`followLane()`). This is the same proportional law as in our Open Challenge program. Two side sensors give the distance and the angle to the wall:
 
 $$
-\alpha = \operatorname{atan2}(d_F - d_R,\ \text{spacing}), \qquad \text{correction} = \text{side} \cdot \big(K_{dist}(\text{dist} - \text{target}) + K_{angle}\,\alpha\big)
+\alpha = \mathrm{atan2}(d_F - d_R,\ \text{spacing}), \qquad \text{correction} = \text{side} \cdot \big(K_{dist}(\text{dist} - \text{target}) + K_{angle}\,\alpha\big)
 $$
 
 Readings above 700 mm (no wall) or more than 120 mm closer than the target (a parking wall or a pillar) are rejected. The robot then holds the section heading with the gyro. A front reading under 150 mm stops the robot immediately.
@@ -622,7 +622,7 @@ All structural parts are our own 3D-printed designs, made on the team's Bambu La
 | Profile                            | 0.30 mm Standard (0.24 mm for small parts)                                                                                                                                                   |
 | Walls / top-bottom layers / infill | 4 / 5 / 25 % gyroid; camera mast 6 walls, 40 %                                                                                                                                               |
 | Supports                           | Tree, from the build plate only                                                                                                                                                              |
-| Material                           | &#32;PLA-CF suggested for the mast and other parts,  like camera fork and tower mount (stiffer, steadier image) (PETG tried but proved to be very stiff for handling while connecting parts) |
+| Material                           | PLA-CF suggested for the mast and other parts,  like camera fork and tower mount (stiffer, steadier image) (PETG tried but proved to be very stiff for handling while connecting parts)      |
 
 (Both PETG and PLA-CF soften at about 55–60 °C, so the robot must not be left in a hot car or in direct sun.)
 
