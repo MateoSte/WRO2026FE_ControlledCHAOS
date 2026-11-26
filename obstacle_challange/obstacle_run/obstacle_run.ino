@@ -72,7 +72,6 @@ const uint8_t CCMD_SNAP = 1, CCMD_RESET = 2, CCMD_COMPOSE = 3;
 const int   DRIVE_PWM       = 150;     // uz zid (sporije nego open_challenge: preciznije okidanje zavoja)
 const int   TURN_PWM        = 100;
 const int   ACROSS_PWM      = 90;      // preko staze (prema prednjem zidu)
-const int   EXIT_PWM        = 100;     // izlazak iz parkinga
 const float KP_DIST         = 0.08;    // kao open_challenge
 const float KP_ANGLE        = 0.8;
 const float KP_HEADING      = 1.0;
@@ -82,27 +81,43 @@ const float CORNER_ARM_X_MM = 700.0;   // zavoj se smije okinuti tek od ovog x
 const int   ACROSS_TOL_MM   = 15;      // preko staze: dovoljno blizu cilja
 const float TURN_EARLY_DEG  = 6.0;     // kao open_challenge
 const int   EMERGENCY_MM    = 150;     // zid ispred blize = HITNI STOP
-const int   ENC_SIGN        = 1;       // TODO: +1 ako encCount RASTE u voznji naprijed (naredba 'q' ispisuje)
+const int   ENC_SIGN        = 1;       // TODO: +1 if drive.rawAngle() grows while motor(+) drives forward (command 'q' prints it)
 const float TOF_SPACING_R_MM = 120.0;  // TODO kao u open_challenge
 const float TOF_SPACING_L_MM = 120.0;
 const unsigned long STRAIGHT_TIMEOUT_MS = 10000;
 const unsigned long TURN_TIMEOUT_MS     = 5000;
 const bool  BEZ_MOTORA      = false;   // true = sve osim pogona (sken, plan, ispis)
 
-// Izlazak iz parkinga = potezi iz tests/parking/parking.ino (setup), zapisani u
-// STVARNOM smjeru voznje (+ naprijed). Tamo driveMm() vozi preko klase Motor
-// s Direction::COUNTERCLOCKWISE, pa je driveMm(+20) fizicki UNATRAG u odnosu
-// na motor(+) iz open_challenge. Uz to tumacenje niz okrece robota PREMA stazi
-// i zavrsava okomito na pocetni smjer (lice prema unutarnjem zidu) - u
-// parking.ino zapisan je za CW (staza desno). Ovdje se zrcali po smjeru.
-//   toward = +1: kotaci prema stazi, -1: od staze.   Provjera: naredba 'x'.
-struct ExitLeg { int8_t toward; int16_t mm; };
-const ExitLeg EXIT_LEGS[] = {{-1, -20}, {+1, 20}, {-1, -20}, {+1, 30},
-                             {-1, -20}, {+1, 20}, {-1, -20}, {+1, 200}};
+// ---------------- PARKING EXIT (tests/parking/parking.ino) ----------------
+// The parking exit is the manoeuvre the team already tested on the robot in
+// tests/parking/parking.ino (it ends almost perpendicular to the parking lot).
+// It runs with the SAME functions, steering() and driveMm(), and the same
+// Motor / Servo objects from includes.ino ('drive', 'steer'), so the robot moves
+// exactly as in that test. Only two things were added:
+//   1. tick() inside their wait loops, so the gyro and the odometry keep
+//      running during the manoeuvre (the plan needs the heading afterwards);
+//   2. mirroring of the steering for the other driving direction.
+// EXIT_TESTED_DIR = the direction in which parking.ino was tested on the mat:
+//   -1 = CW (lane on the robot's right), +1 = CCW (lane on the robot's left).
+// For the other direction every steering value changes sign; distances stay.
+const int EXIT_TESTED_DIR = -1;               // TODO: confirm in which direction the test was done
+struct ExitLeg { float steerDeg; float mm; };  // the calls from parking.ino setup(), in order
+const ExitLeg EXIT_LEGS[] = {{-17, 20}, {17, -20}, {-17, 20}, {17, -30},
+                             {-17, 20}, {17, -20}, {-17, 20}, {17, -200}};
 
-// ---------------- MG995 (isto kao open_challenge) ----------------
-const int   STEER_US_MIN    = 500;
-const int   STEER_US_MAX    = 2500;
+// Settings copied unchanged from tests/parking/parking.ino
+const int   DRIVE_SPEED      = 100;           // drive.run(): 0..255
+const int   SLOW_SPEED       = 50;            // last SLOW_ZONE_MM slower (less overshoot)
+const float SLOW_ZONE_MM     = 15.0;
+const int   DRIVE_SIGN       = 1;             // as in parking.ino
+const unsigned long DRIVE_TIMEOUT_MS = 5000;
+const int   STEER_MS_PER_DEG = 4;             // wait for the MG995 (~0.2 s / 60 deg)
+const float MM_PER_DEG = WHEEL_CIRCUMFERENCE_MM / 360.0f
+                       * (float)ENC_PULSES_PER_OUTPUT_REV / ENC_PULSES_PER_WHEEL_REV;
+
+// Motor PWM: drive.begin() (classes.ino) sets 20 kHz with 10-bit resolution,
+// so motor() below scales its 0..255 speed to 0..1023.
+const int   MOTOR_DUTY_MAX   = 1023;
 
 // =====================================================================
 //  HARDVER (kopija iz open_challenge.ino)
@@ -120,28 +135,26 @@ Tof tofLF = {VL53L1X(), MUX_TOF_LEFT_FRONT,  -1, false, 255};
 Tof tofLR = {VL53L1X(), MUX_TOF_LEFT_REAR,   -1, false, 255};
 Tof tofF  = {VL53L1X(), MUX_TOF_FRONT,       -1, false, 255};
 
-volatile long encCount = 0;
 float gyroBias = 0;
 float yawDeg   = 0;                   // + = okret ulijevo
 unsigned long lastYawUs = 0;
 int imuErrors = 0;
-
-void IRAM_ATTR encISR() { if (digitalRead(ENC_B)) encCount++; else encCount--; }
 
 void motor(int speed) {               // + naprijed, - natrag
   if (BEZ_MOTORA) speed = 0;
   digitalWrite(STBY, HIGH);
   if (speed >= 0) { digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW); }
   else            { digitalWrite(AIN1, LOW);  digitalWrite(AIN2, HIGH); speed = -speed; }
-  ledcWrite(PWMA, constrain(speed, 0, 255));
+  ledcWrite(PWMA, constrain(speed, 0, 255) * MOTOR_DUTY_MAX / 255);   // 0..255 -> 10-bit duty
 }
-void brake()    { digitalWrite(AIN1, HIGH); digitalWrite(AIN2, HIGH); ledcWrite(PWMA, 255); }
+void brake()    { digitalWrite(AIN1, HIGH); digitalWrite(AIN2, HIGH); ledcWrite(PWMA, MOTOR_DUTY_MAX); }
 void motorOff() { ledcWrite(PWMA, 0); digitalWrite(AIN1, LOW); digitalWrite(AIN2, LOW); digitalWrite(STBY, LOW); }
 
+// Steering through the Servo object 'steer' from includes.ino (same 500-2500 us
+// mapping as before). Using one object everywhere keeps steer.angle() correct,
+// which steering() from parking.ino needs for its wait time.
 void steerTo(float deg) {
-  deg = constrain(deg, (float)STEER_LEFT, (float)STEER_RIGHT);
-  long us = STEER_US_MIN + (long)(deg * (STEER_US_MAX - STEER_US_MIN) / 180.0);
-  ledcWrite(STEER_PIN, us * ((1L << SERVO_PWM_BITS) - 1) / 20000L);
+  steer.angle(constrain(deg, (float)STEER_LEFT, (float)STEER_RIGHT));
 }
 
 void mux(uint8_t ch) { Wire.beginTransmission(ADDR_MUX); Wire.write(1 << ch); Wire.endTransmission(); }
@@ -216,15 +229,13 @@ bool startPressed() {
 int   dir    = 0;                     // +1 = CCW, -1 = CW
 float course = 0;                     // smjer trenutne sekcije (st., isti okvir kao yawDeg)
 float odoX = 0, odoW = 0;
-long  lastEncOdo = 0;
-
-float mmPerPulse() { return WHEEL_CIRCUMFERENCE_MM / ENC_PULSES_PER_WHEEL_REV; }
+float lastAngOdo = 0;                 // last drive.rawAngle() used by tick()
 
 void tick() {                         // zvati u svakoj petlji voznje
   updateYaw();
-  long e = encCount;
-  float ds = ENC_SIGN * (e - lastEncOdo) * mmPerPulse();
-  lastEncOdo = e;
+  float a = drive.rawAngle();                          // encoder of the Motor class (ISR with pull-ups)
+  float ds = ENC_SIGN * (a - lastAngOdo) * MM_PER_DEG;
+  lastAngOdo = a;
   float psi = (yawDeg - course) * DEG_TO_RAD;          // + = lijevo od smjera sekcije
   odoX += ds * cosf(psi);
   odoW -= dir * ds * sinf(psi);                        // CCW: lijevo = prema unutarnjem zidu
@@ -512,33 +523,54 @@ bool driveAcross(float heading, float frontTarget) {
   return true;
 }
 
-// Voznja zadanog puta (mm, + naprijed) s trenutnim zakretom kotaca.
-bool driveDist(float mm, int pwm) {
-  long e0 = encCount;
+// ---------------------------------------------------------------------
+//  steering() and driveMm() from tests/parking/parking.ino.
+//  Unchanged except: delay() -> waitTick() / tick() (gyro + odometry keep
+//  running) and BEZ_MOTORA (dry run without the drive motor).
+// ---------------------------------------------------------------------
+float steering(float deg) {           // wheels: 0 = straight, - = left, + = right (servo degrees)
+  float target = constrain(STEER_CENTER + deg, (float)STEER_LEFT, (float)STEER_RIGHT);
+  float change = fabsf(target - steer.angle());
+  steer.angle(target);
+  waitTick(50 + (int)(change * STEER_MS_PER_DEG));
+  return target - STEER_CENTER;
+}
+
+float driveMm(float mm) {             // drives 'mm' with the current wheel angle; returns mm driven
+  if (mm == 0) return 0;
+  int dirn = (mm > 0) ? 1 : -1;
   float target = fabsf(mm);
+  float start = drive.rawAngle();
   unsigned long t0 = millis();
-  motor((mm > 0 ? 1 : -1) * pwm);
-  while (labs(encCount - e0) * mmPerPulse() < target) {
-    if (millis() - t0 > 3000) return fail("timeout u potezu");
+  while (true) {
+    float done = fabsf(drive.rawAngle() - start) * MM_PER_DEG;
+    if (done >= target) break;
+    if (millis() - t0 > DRIVE_TIMEOUT_MS) { Serial.println("driveMm: TIMEOUT"); break; }
+    int speed = (target - done > SLOW_ZONE_MM) ? DRIVE_SPEED : SLOW_SPEED;
+    drive.run(BEZ_MOTORA ? 0 : DRIVE_SIGN * dirn * speed);
     tick();
     delay(1);
   }
-  stopHere();
-  return true;
+  drive.brake();
+  waitTick(150);
+  drive.stop();
+  return fabsf(drive.rawAngle() - start) * MM_PER_DEG;
 }
 
 // =====================================================================
 //  MANEVRI
 // =====================================================================
 bool exitParking() {
-  Serial.println("Izlazak iz parkinga...");
+  int mirror = (dir == EXIT_TESTED_DIR) ? 1 : -1;      // other direction: mirrored steering
+  Serial.printf("Izlazak iz parkinga (tests/parking, %s)...\n", mirror > 0 ? "kao u testu" : "zrcaljeno");
+  digitalWrite(STBY, HIGH);           // drive.run() does not touch STBY; motorOff() may have cleared it
   for (const ExitLeg &l : EXIT_LEGS) {
-    bool left = (l.toward > 0) == (dir > 0);             // staza je lijevo u CCW, desno u CW
-    steerTo(left ? STEER_LEFT : STEER_RIGHT);
-    waitTick(250);
-    if (!driveDist(l.mm, EXIT_PWM)) return false;
+    float wheels = steering(mirror * l.steerDeg);
+    float done = driveMm(l.mm);
+    Serial.printf("  kotaci %+4.0f st., %+5.0f mm -> prijedjeno %4.0f mm, smjer %5.1f st.\n",
+                  wheels, l.mm, done, yawDeg - course);
   }
-  steerTo(STEER_CENTER);
+  steering(0);
   Serial.printf("  nakon izlaska: x %.0f w %.0f, smjer %.0f st. (ocekivano %d)\n", odoX, odoW, yawDeg - course, dir * 90);
   return true;
 }
@@ -559,7 +591,7 @@ char manualMap[route::LINES + 1] = "";
 
 void printPose(const char *what) { Serial.printf("  %s: x %.0f w %.0f yaw %.1f\n", what, odoX, odoW, yawDeg - course); }
 
-void runObstacle(bool useScan, bool drive) {
+void runObstacle(bool useScan, bool doDrive) {
   Serial.println("\nNe diraj robota - kalibracija ziroskopa...");
   delay(500);
   gyroCalibrate();
@@ -579,11 +611,11 @@ void runObstacle(bool useScan, bool drive) {
   route::Plan plan;
   route::build(plan, obsMap, dir, START_FIRST_LINE[di], FINISH_LAST_LINE[di], START_BLOCK_LINE[di]);
   printMapAndPlan(useScan ? raw : nullptr, obsMap, plan);
-  if (!drive) { Serial.println("(samo sken - bez voznje)"); return; }
+  if (!doDrive) { Serial.println("(samo sken - bez voznje)"); return; }
 
   // ---- start ----
   odoX = START_X_MM[di]; odoW = START_W_MM;
-  lastEncOdo = encCount;
+  lastAngOdo = drive.rawAngle();
   yawDeg = 0; lastYawUs = micros();   // smjer u parkingu = smjer voznje
   unsigned long t0 = millis();
 
@@ -628,11 +660,11 @@ void runObstacle(bool useScan, bool drive) {
 void turnTest() {
   gyroCalibrate();
   yawDeg = 0; lastYawUs = micros(); course = 0; dir = 1;
-  odoX = 0; odoW = 500; lastEncOdo = encCount;
-  long e0 = encCount;
+  odoX = 0; odoW = 500; lastAngOdo = drive.rawAngle();
+  float a0 = drive.rawAngle();
   motor(TURN_PWM); waitTick(150);
-  Serial.printf("Enkoder u voznji naprijed: %s (ENC_SIGN = %s)\n",
-                encCount > e0 ? "RASTE" : "PADA", encCount > e0 ? "+1" : "-1");
+  bool grows = drive.rawAngle() > a0;
+  Serial.printf("Enkoder u voznji naprijed: %s (ENC_SIGN = %s)\n", grows ? "RASTE" : "PADA", grows ? "+1" : "-1");
   stopHere();
   odoX = 0; odoW = 500;
   Serial.println("Oznaci sredinu robota na podu. Zaokret za 2 s...");
@@ -654,17 +686,18 @@ void setup() {
   G.sideToCenter = SIDE_TO_CENTER_MM; G.frontToCenter = FRONT_TO_CENTER_MM;
   G.turnFwd = TURN_FWD_MM; G.turnSide = TURN_SIDE_MM;
 
-  pinMode(AIN1, OUTPUT); pinMode(AIN2, OUTPUT); pinMode(STBY, OUTPUT);
-  ledcAttach(PWMA, MOTOR_PWM_FREQ, MOTOR_PWM_BITS);
+  // Motor and steering servo through the classes from includes.ino, exactly as
+  // in tests/parking/parking.ino: drive.begin() sets the motor pins, 20 kHz /
+  // 10-bit PWM and the encoder interrupt (with pull-ups); steer.begin() sets
+  // 50 Hz / 14-bit PWM for the MG995.
+  drive.begin();
   motorOff();
-  ledcAttach(STEER_PIN, SERVO_PWM_FREQ, SERVO_PWM_BITS);
+  steer.begin();
   steerTo(STEER_CENTER);
   ledcAttach(TOWER_PIN, SERVO_PWM_FREQ, SERVO_PWM_BITS);
   analogSetPinAttenuation(FEEDBACK_PIN, ADC_11db);
   towerWriteDeg(TOWER_FWD_DEG);
 
-  pinMode(ENC_A, INPUT); pinMode(ENC_B, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENC_A), encISR, RISING);
   pinMode(START_PIN, INPUT_PULLUP);
 
   Wire.begin(I2C_SDA, I2C_SCL, I2C_FREQ);
@@ -698,7 +731,7 @@ void loop() {
   } else if (c == 'x') {
     gyroCalibrate(); yawDeg = 0; lastYawUs = micros(); course = 0;
     dir = decideDirection();
-    odoX = START_X_MM[dir > 0 ? 0 : 1]; odoW = START_W_MM; lastEncOdo = encCount;
+    odoX = START_X_MM[dir > 0 ? 0 : 1]; odoW = START_W_MM; lastAngOdo = drive.rawAngle();
     exitParking();
   } else if (c == 'q') turnTest();
   else Serial.println("? START/s | k | m <mapa> | r | x | q");
