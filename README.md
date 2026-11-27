@@ -119,6 +119,8 @@ The change from 43.2 mm to Ø 62.4 mm wheels kept both axles in place, but reduc
 
 ## 4. Power
 
+![Wiring diagram](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Wiring_diagram.jpg?raw=true)
+
 One 3S Li-ion pack feeds three separated rails: the battery rail for the drive motor, a 5 V servo rail and a 5 V logic rail, so a servo current spike cannot reset the controller.
 
 ![Power supply image](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/powerSupply_4.png?raw=true)
