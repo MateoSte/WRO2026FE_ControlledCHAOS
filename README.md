@@ -661,7 +661,20 @@ All structural parts are our own 3D-printed designs, made on the team's Bambu La
 
 ### 8.4 CAD model as built (v1.0)
 
-![](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/powerSupply_4.png?raw=true)
+![Robot front](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image2.jpg?raw=true)
+![Robot left](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image5.jpg?raw=true)
+![Robot rear](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image3.jpg?raw=true)
+![Robot right](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image1.jpg?raw=true)
+![Robot top](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image6.jpg?raw=true)
+![Robot bottom](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Robot_image4.jpg?raw=true)
+
+---
+
+![Chasis final](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_final.png?raw=true)
+![Chasis front](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_front.png?raw=true)
+![Chasis left](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_left.png?raw=true)
+![Chasis rear](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_rear.png?raw=true)
+![Chasis right](https://github.com/MateoSte/WRO2026FE_ControlledCHAOS/blob/main/imgs/Chasis_right.png?raw=true)
 
 The chassis we are finally statisfed with passes all automatic checks: every printed part is one solid, the tie-rod screws clear the plate over the full steering travel, and the camera head turns a full circle without collisions. The model was drawn with LEGO 43.2 × 22 mm wheels; the vehicle now runs on Ø 62.4 mm wheels on the same axles, with the mast shortened to keep the height at 290 mm.
 
