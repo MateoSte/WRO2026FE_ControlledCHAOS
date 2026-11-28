@@ -102,11 +102,11 @@ const bool  BEZ_MOTORA      = false;   // true = sve osim pogona (sken, plan, is
 // For the other direction every steering value changes sign; distances stay.
 const int EXIT_TESTED_DIR = -1;               // TODO: confirm in which direction the test was done
 struct ExitLeg { float steerDeg; float mm; };  // the calls from parking.ino setup(), in order
-// const ExitLeg EXIT_LEGS[] = {{-17, 18}, {17, -18},{-17, 18}, {17, -18},
-//                              {-17, 18}, {17, -18},{-17, 18}, {17, -18}, 
-//                              {17, -200}};
+const ExitLeg EXIT_LEGS[] = {{-17, 25}, {17, -18},{-17, 22}, {17, -18},
+                             {-17, 18}, {17, -18},{-17, 18}, {17, -18}, 
+                             {17, -200}};
 
-const ExitLeg EXIT_LEGS[] = {{0, -500}};
+
 
 // Settings copied unchanged from tests/parking/parking.ino
 const int   DRIVE_SPEED      = 100;           // drive.run(): 0..255

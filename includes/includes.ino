@@ -63,8 +63,8 @@ const uint8_t MUX_ADDR = 0x70;
 // ---------------------------------------------------------------------
 #define STEER_PIN      11
 #define STEER_CENTER   73     // ravno (izmjereno)
-#define STEER_LEFT     55     // krajnje lijevo - NIKAD manje
-#define STEER_RIGHT    90     // krajnje desno - NIKAD vise
+#define STEER_LEFT     55     // krajnje lijevo - NIKAD manje 55
+#define STEER_RIGHT    90     // krajnje desno - NIKAD vise 90
 
 // ---------------------------------------------------------------------
 //  TORANJ KAMERE  -  DFRobot SER0046, 270 st., analogna povratna veza
